@@ -1,8 +1,10 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
-const adminProfileSchema = new mongoose.Schema(
+const vendorProfileSchema = new mongoose.Schema(
   {
-    // Referência ao usuário principal
+    // ============================================
+    // CONEXÃO COM USUÁRIO
+    // ============================================
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -10,7 +12,9 @@ const adminProfileSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // Dados pessoais completos
+    // ============================================
+    // DADOS DE VERIFICAÇÃO DO VENDEDOR
+    // ============================================
     fullName: {
       type: String,
       required: [true, "Nome completo é obrigatório"],
@@ -27,7 +31,7 @@ const adminProfileSchema = new mongoose.Schema(
       required: [true, "Data de nascimento é obrigatória"],
     },
 
-    // Fotos de verificação
+    // Fotos de verificação (privadas)
     personalPhoto: {
       type: String,
       default: null,
@@ -41,18 +45,9 @@ const adminProfileSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Dados adicionais
-    address: {
-      street: { type: String, trim: true },
-      number: { type: String, trim: true },
-      complement: { type: String, trim: true },
-      neighborhood: { type: String, trim: true },
-      city: { type: String, trim: true },
-      state: { type: String, trim: true },
-      zipCode: { type: String, trim: true },
-    },
-
-    // Status de verificação
+    // ============================================
+    // STATUS DE VERIFICAÇÃO
+    // ============================================
     verificationStatus: {
       type: String,
       enum: ["pending", "under_review", "approved", "rejected"],
@@ -67,7 +62,9 @@ const adminProfileSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Dados bancários
+    // ============================================
+    // DADOS BANCÁRIOS
+    // ============================================
     bankDetails: {
       bankName: { type: String },
       accountType: { 
@@ -79,19 +76,17 @@ const adminProfileSchema = new mongoose.Schema(
       pixKey: { type: String },
     },
 
-    // Informações de vendedor/loja
-    storeName: {
+    // ============================================
+    // NOME PÚBLICO DO VENDEDOR
+    // ============================================
+    displayName: {
       type: String,
       trim: true,
-      default: null,
+      default: null, // Nome que aparece nas vendas
     },
-    storeDescription: {
-      type: String,
-      default: null,
-    },
-    
+
     // ============================================
-    // PRODUTOS DO VENDEDOR
+    // PRODUTOS DIGITAIS DO VENDEDOR
     // ============================================
     products: [
       {
@@ -156,9 +151,8 @@ const adminProfileSchema = new mongoose.Schema(
     ],
     
     // ============================================
-    // DADOS FINANCEIROS DO VENDEDOR
+    // SISTEMA FINANCEIRO
     // ============================================
-    
     balance: {
       available: {
         type: Number,
@@ -229,6 +223,9 @@ const adminProfileSchema = new mongoose.Schema(
       }
     ],
 
+    // ============================================
+    // HISTÓRICO DE VENDAS (PRODUTOS DIGITAIS)
+    // ============================================
     salesHistory: [
       {
         orderId: {
@@ -293,33 +290,23 @@ const adminProfileSchema = new mongoose.Schema(
         },
         orderStatus: {
           type: String,
-          enum: ["pending", "processing", "shipped", "delivered", "cancelled", "refunded"],
+          enum: ["pending", "processing", "completed", "cancelled", "refunded"],
           default: "pending",
-        },
-        shippingAddress: {
-          street: String,
-          number: String,
-          complement: String,
-          neighborhood: String,
-          city: String,
-          state: String,
-          zipCode: String,
-        },
-        trackingCode: {
-          type: String,
-          default: null,
         },
         saleDate: {
           type: Date,
           default: Date.now,
         },
-        deliveryDate: {
+        completedDate: {
           type: Date,
           default: null,
         },
       }
     ],
 
+    // ============================================
+    // HISTÓRICO DE SAQUES
+    // ============================================
     withdrawalHistory: [
       {
         amount: {
@@ -365,7 +352,9 @@ const adminProfileSchema = new mongoose.Schema(
       }
     ],
 
-    // Estatísticas
+    // ============================================
+    // ESTATÍSTICAS
+    // ============================================
     totalSales: {
       type: Number,
       default: 0,
@@ -393,7 +382,9 @@ const adminProfileSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // Status ativo/inativo
+    // ============================================
+    // STATUS
+    // ============================================
     isActive: {
       type: Boolean,
       default: true,
@@ -404,17 +395,23 @@ const adminProfileSchema = new mongoose.Schema(
   }
 );
 
-// Índices
-adminProfileSchema.index({ userId: 1 })
-adminProfileSchema.index({ cpf: 1 })
-adminProfileSchema.index({ verificationStatus: 1 })
-adminProfileSchema.index({ "salesHistory.orderId": 1 })
-adminProfileSchema.index({ "salesHistory.saleDate": -1 })
-adminProfileSchema.index({ "products.name": "text", "products.category": "text" })
-adminProfileSchema.index({ "products.isActive": 1 })
+// ============================================
+// ÍNDICES
+// ============================================
+vendorProfileSchema.index({ userId: 1 });
+vendorProfileSchema.index({ cpf: 1 });
+vendorProfileSchema.index({ verificationStatus: 1 });
+vendorProfileSchema.index({ "salesHistory.orderId": 1 });
+vendorProfileSchema.index({ "salesHistory.saleDate": -1 });
+vendorProfileSchema.index({ "products.name": "text", "products.category": "text" });
+vendorProfileSchema.index({ "products.isActive": 1 });
+
+// ============================================
+// MÉTODOS
+// ============================================
 
 // Verificar se perfil está completo
-adminProfileSchema.methods.isProfileComplete = function () {
+vendorProfileSchema.methods.isProfileComplete = function () {
   return !!(
     this.fullName &&
     this.cpf &&
@@ -422,81 +419,81 @@ adminProfileSchema.methods.isProfileComplete = function () {
     this.personalPhoto &&
     this.rgFrontPhoto &&
     this.rgBackPhoto
-  )
-}
+  );
+};
 
 // Calcular idade
-adminProfileSchema.methods.getAge = function () {
-  if (!this.dateOfBirth) return null
-  const today = new Date()
-  const birthDate = new Date(this.dateOfBirth)
-  let age = today.getFullYear() - birthDate.getFullYear()
-  const monthDiff = today.getMonth() - birthDate.getMonth()
+vendorProfileSchema.methods.getAge = function () {
+  if (!this.dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(this.dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--
+    age--;
   }
-  return age
-}
+  return age;
+};
 
 // Aprovar verificação
-adminProfileSchema.methods.approve = async function () {
-  this.verificationStatus = "approved"
-  this.verificationDate = new Date()
-  this.rejectionReason = null
-  await this.save()
+vendorProfileSchema.methods.approve = async function () {
+  this.verificationStatus = "approved";
+  this.verificationDate = new Date();
+  this.rejectionReason = null;
+  await this.save();
 };
 
 // Rejeitar verificação
-adminProfileSchema.methods.reject = async function (reason) {
-  this.verificationStatus = "rejected"
-  this.verificationDate = new Date()
-  this.rejectionReason = reason
-  await this.save()
-}
+vendorProfileSchema.methods.reject = async function (reason) {
+  this.verificationStatus = "rejected";
+  this.verificationDate = new Date();
+  this.rejectionReason = reason;
+  await this.save();
+};
 
 // Adicionar produto
-adminProfileSchema.methods.addProduct = async function (productData) {
+vendorProfileSchema.methods.addProduct = async function (productData) {
   this.products.push({
     ...productData,
     createdAt: new Date(),
     updatedAt: new Date(),
-  })
-  this.totalProducts = this.products.filter(p => p.isActive).length
-  await this.save()
-  return this.products[this.products.length - 1]
+  });
+  this.totalProducts = this.products.filter(p => p.isActive).length;
+  await this.save();
+  return this.products[this.products.length - 1];
 };
 
 // Atualizar produto
-adminProfileSchema.methods.updateProduct = async function (productId, updateData) {
-  const product = this.products.id(productId)
-  if (!product) throw new Error("Produto não encontrado")
+vendorProfileSchema.methods.updateProduct = async function (productId, updateData) {
+  const product = this.products.id(productId);
+  if (!product) throw new Error("Produto não encontrado");
   
   Object.assign(product, {
     ...updateData,
     updatedAt: new Date(),
-  })
-  await this.save()
-  return product
-}
+  });
+  await this.save();
+  return product;
+};
 
 // Deletar produto (soft delete)
-adminProfileSchema.methods.deleteProduct = async function (productId) {
-  const product = this.products.id(productId)
-  if (!product) throw new Error("Produto não encontrado")
+vendorProfileSchema.methods.deleteProduct = async function (productId) {
+  const product = this.products.id(productId);
+  if (!product) throw new Error("Produto não encontrado");
   
-  product.isActive = false
-  this.totalProducts = this.products.filter(p => p.isActive).length
-  await this.save()
-}
+  product.isActive = false;
+  this.totalProducts = this.products.filter(p => p.isActive).length;
+  await this.save();
+};
 
 // Adicionar venda ao histórico
-adminProfileSchema.methods.addSale = async function (saleData) {
-  this.salesHistory.push(saleData)
-  this.totalSales += 1
-  this.totalEarnings += saleData.netAmount
+vendorProfileSchema.methods.addSale = async function (saleData) {
+  this.salesHistory.push(saleData);
+  this.totalSales += 1;
+  this.totalEarnings += saleData.netAmount;
   
-  this.balance.pending += saleData.netAmount
-  this.balance.total += saleData.netAmount
+  this.balance.pending += saleData.netAmount;
+  this.balance.total += saleData.netAmount;
   
   this.balanceHistory.push({
     type: "sale",
@@ -506,44 +503,44 @@ adminProfileSchema.methods.addSale = async function (saleData) {
     balanceBefore: this.balance.total - saleData.netAmount,
     balanceAfter: this.balance.total,
     status: "pending",
-  })
+  });
   
   // Atualizar contagem de vendas do produto
   saleData.products.forEach(item => {
-    const product = this.products.id(item.productId)
+    const product = this.products.id(item.productId);
     if (product) {
-      product.sold += item.quantity
+      product.sold += item.quantity;
       if (product.stock > 0) {
-        product.stock -= item.quantity
+        product.stock -= item.quantity;
       }
     }
-  })
+  });
   
-  await this.save()
-}
+  await this.save();
+};
 
 // Liberar saldo
-adminProfileSchema.methods.releaseBalance = async function (orderId, amount) {
-  this.balance.pending -= amount
-  this.balance.available += amount
+vendorProfileSchema.methods.releaseBalance = async function (orderId, amount) {
+  this.balance.pending -= amount;
+  this.balance.available += amount;
   
   const transaction = this.balanceHistory.find(
     t => t.orderId?.toString() === orderId.toString() && t.type === "sale"
-  )
+  );
   if (transaction) {
-    transaction.status = "completed"
+    transaction.status = "completed";
   }
   
-  await this.save()
-}
+  await this.save();
+};
 
 // Solicitar saque
-adminProfileSchema.methods.requestWithdrawal = async function (amount, fee = 0) {
+vendorProfileSchema.methods.requestWithdrawal = async function (amount, fee = 0) {
   if (amount > this.balance.available) {
-    throw new Error("Saldo insuficiente")
+    throw new Error("Saldo insuficiente");
   }
   
-  const netAmount = amount - fee
+  const netAmount = amount - fee;
   
   this.withdrawalHistory.push({
     amount,
@@ -551,10 +548,10 @@ adminProfileSchema.methods.requestWithdrawal = async function (amount, fee = 0) 
     netAmount,
     bankDetails: this.bankDetails,
     status: "pending",
-  })
+  });
   
-  this.balance.available -= amount
-  this.balance.total -= amount
+  this.balance.available -= amount;
+  this.balance.total -= amount;
   
   this.balanceHistory.push({
     type: "withdrawal",
@@ -563,7 +560,7 @@ adminProfileSchema.methods.requestWithdrawal = async function (amount, fee = 0) 
     balanceBefore: this.balance.total + amount,
     balanceAfter: this.balance.total,
     status: "pending",
-  })
+  });
   
   if (fee > 0) {
     this.balanceHistory.push({
@@ -573,16 +570,16 @@ adminProfileSchema.methods.requestWithdrawal = async function (amount, fee = 0) 
       balanceBefore: this.balance.total,
       balanceAfter: this.balance.total,
       status: "completed",
-    })
+    });
   }
   
-  this.totalWithdrawals += netAmount
-  await this.save()
+  this.totalWithdrawals += netAmount;
+  await this.save();
 };
 
 // Cobrar taxa da plataforma
-adminProfileSchema.methods.chargePlatformFee = async function (orderId, feeAmount) {
-  this.balance.total -= feeAmount
+vendorProfileSchema.methods.chargePlatformFee = async function (orderId, feeAmount) {
+  this.balance.total -= feeAmount;
   
   this.balanceHistory.push({
     type: "platform_fee",
@@ -592,11 +589,11 @@ adminProfileSchema.methods.chargePlatformFee = async function (orderId, feeAmoun
     balanceBefore: this.balance.total + feeAmount,
     balanceAfter: this.balance.total,
     status: "completed",
-  })
+  });
   
-  await this.save()
+  await this.save();
 };
 
-const AdminProfile = mongoose.model("AdminProfile", adminProfileSchema)
+const VendorProfile = mongoose.model("VendorProfile", vendorProfileSchema);
 
-export default AdminProfile
+export default VendorProfile;

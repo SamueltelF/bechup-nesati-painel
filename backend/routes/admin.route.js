@@ -11,7 +11,7 @@ import {
   getVendorProducts,
   getAllProducts,
   getProductDetails,
-} from "../controllers/admin.controller.js"
+} from "../controllers/vendor.controller.js"
 
 const router = express.Router();
 
