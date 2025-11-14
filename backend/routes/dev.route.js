@@ -7,34 +7,42 @@ import {
   demoteToCustomer,
   deleteSellerProfile,
   getCustomerDetails,
-  getDevStats,
+  getDevStats
 } from "../controllers/dev.controller.js";
 
 const router = express.Router();
 
 // ============================================
-// TODAS AS ROTAS REQUEREM SENHA DE DEV
+// MIDDLEWARE DE VERIFICAÇÃO
 // ============================================
+// Aplica verificação de senha em todas as rotas
+router.use(verifyDevPassword);
 
-// Estatísticas gerais
-router.post("/stats", verifyDevPassword, getDevStats);
+// ============================================
+// ROTAS DE ESTATÍSTICAS (DASHBOARD)
+// ============================================
+router.get("/stats", getDevStats);
 
-// Listar customers (não-vendedores)
-router.post("/customers", verifyDevPassword, listCustomers);
+// ============================================
+// ROTAS DE CUSTOMERS (CLIENTES)
+// ============================================
+router.get("/customers", listCustomers);
+router.get("/customers/:userId", getCustomerDetails);
 
-// Listar vendedores (com AdminProfile)
-router.post("/sellers", verifyDevPassword, listSellers);
+// ============================================
+// ROTAS DE SELLERS (VENDEDORES)
+// ============================================
+router.get("/sellers", listSellers);
 
-// Ver detalhes de um customer
-router.post("/customer/:userId", verifyDevPassword, getCustomerDetails);
+// ============================================
+// ROTAS DE PROMOÇÃO/REBAIXAMENTO
+// ============================================
+router.post("/promote/:userId", promoteToSeller);
+router.post("/demote/:userId", demoteToCustomer);
 
-// Promover customer para vendedor
-router.post("/promote/:userId", verifyDevPassword, promoteToSeller);
-
-// Rebaixar vendedor para customer
-router.post("/demote/:userId", verifyDevPassword, demoteToCustomer);
-
-// Deletar perfil de vendedor (CUIDADO - apenas dev/testes)
-router.delete("/seller/:userId", verifyDevPassword, deleteSellerProfile);
+// ============================================
+// ROTAS DE DELEÇÃO (CUIDADO - APENAS DEV)
+// ============================================
+router.delete("/sellers/:userId", deleteSellerProfile);
 
 export default router;

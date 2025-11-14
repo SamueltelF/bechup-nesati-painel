@@ -1,160 +1,42 @@
+// routes/auth.routes.js
 import express from "express";
-
-// Controllers
-import {
-  login,
-  logout,
-  signup,
-  refreshToken,
+import { 
+  signup, 
+  login, 
+  logout, 
+  refreshToken, 
   getProfile,
   uploadProfilePicture,
   deletarProfilePicture,
   updateEmail,
+  forceLogout,
   updatePhone,
-  forceLogout
+  // Novos endpoints de verificação
+  sendEmailVerificationCode,
+  verifyEmailCode,
+  resendEmailVerificationCode
 } from "../controllers/auth.controller.js";
-
-// Middlewares
-import { 
-  protectRoute, 
-  requirePhoneVerified,
-  rateLimit 
-} from "../middleware/auth.middleware.js";
-
-// Limiter customizado (seu arquivo existente)
-import limiter from "../middleware/limiter.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// ============================================
-// ROTAS PÚBLICAS (Não requerem autenticação)
-// ============================================
+// Rotas existentes
+router.post("/signup", signup);
+router.post("/login", login);
+router.post("/logout", logout);
+router.post("/refresh-token", refreshToken);
+router.post("/force-logout", forceLogout);
 
-/**
- * Criar nova conta
- * Rate limit: Use seu limiter customizado
- */
-router.post("/signup", 
-  limiter, 
-  signup
-);
+// Rotas protegidas existentes
+router.get("/profile", protectRoute, getProfile);
+router.post("/upload-profile-picture", protectRoute, uploadProfilePicture);
+router.delete("/delete-profile-picture", protectRoute, deletarProfilePicture);
+router.put("/update-email", protectRoute, updateEmail);
+router.put("/update-phone", protectRoute, updatePhone);
 
-/**
- * Login
- * Rate limit: Use seu limiter customizado
- */
-router.post("/login", 
-  limiter, 
-  login
-);
-
-/**
- * Renovar access token usando refresh token
- * Não precisa de protectRoute (usa cookie refreshToken)
- */
-router.post("/refresh-token", 
-  refreshToken
-);
-
-/**
- * Logout forçado (limpa cookies sem verificar token)
- * Útil para quando o token está inválido/corrompido
- */
-router.post("/force-logout", 
-  forceLogout
-);
-
-// ============================================
-// ROTAS PROTEGIDAS (Requerem autenticação)
-// ============================================
-
-/**
- * Logout normal
- * POST é mais correto semanticamente para logout
- */
-router.post("/logout", 
-  protectRoute, 
-  logout
-);
-
-/**
- * Buscar perfil do usuário logado
- */
-router.get("/profile", 
-  protectRoute, 
-  getProfile
-);
-
-// ============================================
-// FOTO DE PERFIL
-// ============================================
-
-/**
- * Upload de foto de perfil pública
- * Qualquer usuário pode fazer upload
- */
-router.post("/profile/picture", 
-  protectRoute, 
-  uploadProfilePicture
-);
-
-/**
- * Deletar foto de perfil
- */
-router.delete("/profile/picture", 
-  protectRoute, 
-  deletarProfilePicture
-);
-
-// ============================================
-// ATUALIZAÇÃO DE DADOS PESSOAIS
-// ============================================
-
-/**
- * Atualizar email
- * IMPORTANTE: Requer telefone verificado (segurança)
- */
-router.put("/profile/email", 
-  protectRoute, 
-  requirePhoneVerified, 
-  updateEmail
-);
-
-/**
- * Atualizar/Adicionar/Remover telefone
- * Se enviar phone vazio, remove o telefone
- */
-router.put("/profile/phone", 
-  protectRoute, 
-  updatePhone
-);
-
-// ============================================
-// ROTAS FUTURAS (Comentadas para implementação)
-// ============================================
-
-// VERIFICAÇÃO DE EMAIL/TELEFONE
-// router.post("/verify-email/send", protectRoute, sendEmailVerification);
-// router.post("/verify-email/confirm", protectRoute, verifyEmailCode);
-// router.post("/verify-phone/send", protectRoute, requirePhone, sendPhoneVerification);
-// router.post("/verify-phone/confirm", protectRoute, verifyPhoneCode);
-
-// RECUPERAÇÃO DE SENHA
-// router.post("/forgot-password", limiter, sendPasswordResetEmail);
-// router.post("/reset-password", resetPassword);
-
-// ATUALIZAÇÃO DE OUTROS DADOS
-// router.put("/profile/name", protectRoute, updateName);
-// router.put("/profile/password", protectRoute, updatePassword);
-
-// ENDEREÇOS (Para compras)
-// router.get("/profile/addresses", protectRoute, getAddresses);
-// router.post("/profile/addresses", protectRoute, addAddress);
-// router.put("/profile/addresses/:addressId", protectRoute, updateAddress);
-// router.delete("/profile/addresses/:addressId", protectRoute, deleteAddress);
-
-// PREFERÊNCIAS
-// router.get("/profile/preferences", protectRoute, getPreferences);
-// router.put("/profile/preferences", protectRoute, updatePreferences);
+// ===== NOVAS ROTAS DE VERIFICAÇÃO DE EMAIL =====
+router.post("/send-email-verification", protectRoute, sendEmailVerificationCode);
+router.post("/verify-email", protectRoute, verifyEmailCode);
+router.post("/resend-email-verification", protectRoute, resendEmailVerificationCode);
 
 export default router;

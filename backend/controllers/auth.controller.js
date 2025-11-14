@@ -2,6 +2,7 @@ import redis from "../db/redis.js";
 import User from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 import cloudinary from "../lib/cloudinary.js";
+import { sendVerificationEmail } from "../lib/email.service.js"
 
 const generateToken = (userId) => {
   const accessToken = jwt.sign(
@@ -402,5 +403,157 @@ export const updatePhone = async (req, res) => {
   } catch (error) {
     console.log("erro ao atualizar phone:", error);
     res.status(500).json({ message: "Erro ao atualizar telefone", error });
+  }
+};
+
+export const sendEmailVerificationCode = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: "Email já está verificado" });
+    }
+
+    // Gerar código de 6 dígitos
+    const code = user.generateEmailVerificationCode();
+    await user.save();
+
+    // Enviar email com o código
+    try {
+      await sendVerificationEmail(user.email, user.name, code);
+    } catch (emailError) {
+      console.error("Erro ao enviar email:", emailError);
+      return res.status(500).json({ 
+        message: "Erro ao enviar email de verificação. Tente novamente." 
+      });
+    }
+
+    res.json({ 
+      message: "Código de verificação enviado para seu email",
+      email: user.email,
+      expiresIn: "15 minutos"
+    });
+
+  } catch (error) {
+    console.error("Erro ao enviar código de verificação:", error);
+    res.status(500).json({ 
+      message: "Erro ao enviar código de verificação", 
+      error 
+    });
+  }
+};
+
+// Verificar código de email
+export const verifyEmailCode = async (req, res) => {
+  const { code } = req.body;
+
+  try {
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ 
+        message: "Código deve ter 6 dígitos" 
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: "Email já está verificado" });
+    }
+
+    if (!user.emailVerificationCode) {
+      return res.status(400).json({ 
+        message: "Nenhum código de verificação foi solicitado" 
+      });
+    }
+
+    // Verificar se o código expirou
+    if (user.emailVerificationExpires < Date.now()) {
+      return res.status(400).json({ 
+        message: "Código expirado. Solicite um novo código" 
+      });
+    }
+
+    // Verificar se o código está correto
+    if (user.emailVerificationCode !== code) {
+      return res.status(400).json({ 
+        message: "Código inválido" 
+      });
+    }
+
+    // Marcar email como verificado
+    user.emailVerified = true;
+    user.emailVerificationCode = null;
+    user.emailVerificationExpires = null;
+    await user.save();
+
+    res.json({ 
+      message: "Email verificado com sucesso!",
+      emailVerified: true
+    });
+
+  } catch (error) {
+    console.error("Erro ao verificar código:", error);
+    res.status(500).json({ 
+      message: "Erro ao verificar código", 
+      error 
+    });
+  }
+};
+
+// Reenviar código de verificação (com proteção contra spam)
+export const resendEmailVerificationCode = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: "Email já está verificado" });
+    }
+
+    // Verificar se ainda há um código válido (evitar spam)
+    if (user.emailVerificationExpires && user.emailVerificationExpires > Date.now()) {
+      const timeLeft = Math.ceil((user.emailVerificationExpires - Date.now()) / 1000 / 60);
+      return res.status(429).json({ 
+        message: `Aguarde ${timeLeft} minuto(s) antes de solicitar um novo código` 
+      });
+    }
+
+    // Gerar novo código
+    const code = user.generateEmailVerificationCode();
+    await user.save();
+
+    // Enviar email
+    try {
+      await sendVerificationEmail(user.email, user.name, code);
+    } catch (emailError) {
+      console.error("Erro ao enviar email:", emailError);
+      return res.status(500).json({ 
+        message: "Erro ao enviar email de verificação. Tente novamente." 
+      });
+    }
+
+    res.json({ 
+      message: "Novo código enviado para seu email",
+      email: user.email,
+      expiresIn: "15 minutos"
+    });
+
+  } catch (error) {
+    console.error("Erro ao reenviar código:", error);
+    res.status(500).json({ 
+      message: "Erro ao reenviar código", 
+      error 
+    });
   }
 };
