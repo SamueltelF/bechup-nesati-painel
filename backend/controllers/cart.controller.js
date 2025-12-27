@@ -5,7 +5,6 @@ export const getCartProducts = async (req, res) => {
     const user = req.user;
 
     const prodducts = await Product.find({
-      // $in is a MongoDB operator that selects the documents where the value of a field equals any value in the specified array
       _id: { $in: user.cartItems },
     });
 
@@ -93,6 +92,3 @@ export const getOrders = async (req, res) => {};
 export const getOrderById = async (req, res) => {};
 export const updateOrderToPaid = async (req, res) => {};
 export const updateOrderToDelivered = async (req, res) => {};
-// Compare this snippet from backend/models/Product.js:
-// import mongoose from "mongoose";
-//

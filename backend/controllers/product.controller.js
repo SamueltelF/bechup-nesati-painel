@@ -4,7 +4,7 @@ import Product from "../models/product.model.js";
 
 export const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({}); // Fetch all products from the database
+    const products = await Product.find({}); 
 
     res.json({ products });
   } catch (error) {
@@ -50,10 +50,9 @@ export const getMyProducts = async (req, res) => {
       )
     }
 
-    // Ordenar por data 
+    
     products.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
-    // Paginação
     const startIndex = (page - 1) * limit
     const endIndex = page * limit
     const paginatedProducts = products.slice(startIndex, endIndex)
@@ -83,8 +82,8 @@ export const getFeaturedProducts = async (req, res) => {
       return res.json({ products: JSON.parse(featuredProducts) });
     }
 
-    // .lean method is used to convert the Mongoose document into a plain JavaScript object, good for caching and performance
-    featuredProducts = await Product.find({ isFeatured: true }).lean(); // Fetch all featured products from the database
+   
+    featuredProducts = await Product.find({ isFeatured: true }).lean(); 
 
     if (!featuredProducts) {
       return res.status(404).json({ message: "No featured products found" });
@@ -136,7 +135,7 @@ export const createProduct = async (req, res) => {
 
 export const getRecommendedProducts = async (req, res) => {
   try {
-    // aggregate method is used to perform aggregation operations on the database.it will return a random sample of 3 products
+    
     const recommendedProducts = await Product.aggregate([
       { $sample: { size: 4 } },
       { $project: { _id: 1, name: 1, description: 1, price: 1, image: 1 } },
@@ -203,7 +202,6 @@ export const toggleFeaturedProduct = async (req, res) => {
 
 const updateFeaturedProductsCache = async (updatedProduct) => {
   try {
-    // lean method is used to convert the Mongoose document into a plain JavaScript object, good for caching and performance
     const featuredProducts = await Product.find({ isFeatured: true }).lean();
 
     await redis.set("featured_products", JSON.stringify(featuredProducts));
@@ -222,8 +220,8 @@ export const deleteProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
     if (product.imageUrl) {
-      // pop method is used to remove the last element from the array and return that element. example URL: https://res.cloudinary.com/dx3w7xvsv/image/upload/v1633661234/products/abc.jpg , here it will return abc
-      const publicId = product.imageUrl.split("/").pop().split(".")[0]; // Extracting the public ID from the image URL
+      
+      const publicId = product.imageUrl.split("/").pop().split(".")[0]; 
       try {
         await cloudinary.uploader.destroy(publicId);
         console.log("Image deleted from Cloudinary");
@@ -238,10 +236,6 @@ export const deleteProduct = async (req, res) => {
         });
       }
     }
-    // Now directly delete the product from the database
-    // await Product.findByIdAndDelete(id);
-
-    // Directly delete the fetched product from the database
     await product.deleteOne();
 
     res.json({ message: "Product deleted successfully" });

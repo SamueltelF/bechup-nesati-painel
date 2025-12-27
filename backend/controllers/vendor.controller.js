@@ -2,9 +2,8 @@ import VendorProfile from "../models/admin.model.js";
 import User from "../models/user.model.js";
 import cloudinary from "../lib/cloudinary.js";
 
-// ============================================
+
 // GERENCIAMENTO DE PERFIL DE VENDEDOR
-// ============================================
 
 // Criar/Solicitar perfil de vendedor
 export const createVendorProfile = async (req, res) => {
@@ -171,9 +170,8 @@ export const updateDisplayName = async (req, res) => {
   }
 };
 
-// ============================================
+
 // GERENCIAMENTO DE PRODUTOS
-// ============================================
 
 // Criar novo produto
 export const createProduct = async (req, res) => {
@@ -440,9 +438,8 @@ export const updateStock = async (req, res) => {
   }
 };
 
-// ============================================
+
 // PRODUTOS PÚBLICOS (Para clientes)
-// ============================================
 
 // Buscar produtos de um vendedor específico
 export const getVendorProducts = async (req, res) => {
@@ -637,10 +634,8 @@ export const getProductDetails = async (req, res) => {
   }
 };
 
-// ============================================
-// ESTATÍSTICAS DO VENDEDOR
-// ============================================
 
+// ESTATÍSTICAS DO VENDEDOR
 // Buscar estatísticas do vendedor
 export const getVendorStats = async (req, res) => {
   try {

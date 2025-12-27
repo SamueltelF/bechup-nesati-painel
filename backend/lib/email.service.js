@@ -1,10 +1,6 @@
-// lib/email.service.js
-// Estrutura básica - você precisará configurar um serviço de email real
-// Opções populares: Nodemailer, SendGrid, Resend, AWS SES, etc.
-
 import nodemailer from "nodemailer";
 
-// Configurar transportador (exemplo com Gmail)
+
 const transporter = nodemailer.createTransport({
   service: "gmail", // ou use SMTP customizado
   auth: {
@@ -13,18 +9,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Alternativa com SMTP genérico:
-/*
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: true,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-*/
 
 export const sendVerificationEmail = async (email, name, code) => {
   const mailOptions = {
@@ -165,14 +149,14 @@ export const sendVerificationEmail = async (email, name, code) => {
   }
 };
 
-// Função para testar configuração de email
+
 export const testEmailConnection = async () => {
   try {
     await transporter.verify();
-    console.log("✅ Servidor de email conectado e pronto para enviar emails");
+    console.log("Servidor de email conectado e pronto para enviar emails");
     return true;
   } catch (error) {
-    console.error("❌ Erro ao conectar com servidor de email:", error);
+    console.error(" Erro ao conectar com servidor de email:", error);
     return false;
   }
 };

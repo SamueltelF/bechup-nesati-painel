@@ -2,9 +2,7 @@ import mongoose from "mongoose";
 
 const vendorProfileSchema = new mongoose.Schema(
   {
-    // ============================================
     // CONEXÃO COM USUÁRIO
-    // ============================================
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -12,9 +10,7 @@ const vendorProfileSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // ============================================
     // DADOS DE VERIFICAÇÃO DO VENDEDOR
-    // ============================================
     fullName: {
       type: String,
       required: [true, "Nome completo é obrigatório"],

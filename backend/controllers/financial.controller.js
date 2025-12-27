@@ -1,8 +1,7 @@
 import AdminProfile from "../models/admin.model.js";
 
-// ============================================
+
 // SALDO E BALANÇO
-// ============================================
 
 // Buscar saldo do vendedor
 export const getBalance = async (req, res) => {
@@ -54,10 +53,9 @@ export const getBalanceHistory = async (req, res) => {
       balanceHistory = balanceHistory.filter(t => t.type === type);
     }
 
-    // Ordenar por data (mais recente primeiro)
+    
     balanceHistory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // Paginação
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
     const paginatedHistory = balanceHistory.slice(startIndex, endIndex);
@@ -82,9 +80,8 @@ export const getBalanceHistory = async (req, res) => {
   }
 };
 
-// ============================================
+
 // HISTÓRICO DE VENDAS
-// ============================================
 
 // Buscar todas as vendas do vendedor
 export const getMySales = async (req, res) => {
@@ -116,10 +113,9 @@ export const getMySales = async (req, res) => {
       });
     }
 
-    // Ordenar por data (mais recente primeiro)
+    
     salesHistory.sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate));
 
-    // Paginação
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
     const paginatedSales = salesHistory.slice(startIndex, endIndex);
@@ -230,9 +226,7 @@ export const updateTrackingCode = async (req, res) => {
   }
 };
 
-// ============================================
 // SAQUES
-// ============================================
 
 // Solicitar saque
 export const requestWithdrawal = async (req, res) => {
@@ -272,7 +266,6 @@ export const requestWithdrawal = async (req, res) => {
       });
     }
 
-    // Calcular taxa (exemplo: 2% ou mínimo de R$ 2,00)
     const feePercentage = 0.02;
     const minFee = 2.00;
     const fee = Math.max(amount * feePercentage, minFee);
@@ -323,10 +316,8 @@ export const getWithdrawalHistory = async (req, res) => {
       withdrawalHistory = withdrawalHistory.filter(w => w.status === status);
     }
 
-    // Ordenar por data (mais recente primeiro)
     withdrawalHistory.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
 
-    // Paginação
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
     const paginatedWithdrawals = withdrawalHistory.slice(startIndex, endIndex);
@@ -354,9 +345,7 @@ export const getWithdrawalHistory = async (req, res) => {
   }
 };
 
-// ============================================
 // ESTATÍSTICAS E RELATÓRIOS
-// ============================================
 
 // Dashboard com estatísticas gerais
 export const getDashboard = async (req, res) => {

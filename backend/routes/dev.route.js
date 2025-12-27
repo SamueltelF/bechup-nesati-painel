@@ -1,48 +1,71 @@
 import express from "express";
 import {
-  verifyDevPassword,
-  listCustomers,
-  listSellers,
-  promoteToSeller,
-  demoteToCustomer,
-  deleteSellerProfile,
-  getCustomerDetails,
-  getDevStats
+  // Autenticação
+  adminLogin,
+  adminLogout,
+  checkAdminSession,
+  
+  // Dashboard
+  getDashboardStats,
+  
+  // Pesquisas
+  searchUsers,
+  searchProducts,
+  searchVendors,
+  searchPayments,
+  
+  // Relatórios
+  getProductsReport,
+  getGeneralReport,
+  
+  // Atividades
+  getRecentActivities
 } from "../controllers/dev.controller.js";
+
+
+import { 
+  protectAdminRoute, 
+  checkAdminRole, 
+  rateLimitAdmin 
+} from "../middleware/admin.middleware.js"; 
 
 const router = express.Router();
 
-// ============================================
-// MIDDLEWARE DE VERIFICAÇÃO
-// ============================================
-// Aplica verificação de senha em todas as rotas
-router.use(verifyDevPassword);
+// ROTAS PÚBLICAS (SEM PROTEÇÃO)
+router.post("/login", adminLogin);
 
-// ============================================
-// ROTAS DE ESTATÍSTICAS (DASHBOARD)
-// ============================================
-router.get("/stats", getDevStats);
+// ROTAS PROTEGIDAS (REQUER AUTENTICAÇÃO)
 
-// ============================================
-// ROTAS DE CUSTOMERS (CLIENTES)
-// ============================================
-router.get("/customers", listCustomers);
-router.get("/customers/:userId", getCustomerDetails);
+// Aplicar proteção e rate limit em todas as rotas abaixo
+router.use(protectAdminRoute);
+router.use(rateLimitAdmin(100, 15 * 60 * 1000));
 
-// ============================================
-// ROTAS DE SELLERS (VENDEDORES)
-// ============================================
-router.get("/sellers", listSellers);
+// Autenticação
+router.post("/logout", adminLogout);
+router.get("/session", checkAdminSession);
 
-// ============================================
-// ROTAS DE PROMOÇÃO/REBAIXAMENTO
-// ============================================
-router.post("/promote/:userId", promoteToSeller);
-router.post("/demote/:userId", demoteToCustomer);
+// Dashboard
+router.get("/dashboard-stats", getDashboardStats);
+router.get("/recent-activities", getRecentActivities);
 
-// ============================================
-// ROTAS DE DELEÇÃO (CUIDADO - APENAS DEV)
-// ============================================
-router.delete("/sellers/:userId", deleteSellerProfile);
+// Pesquisas
+router.get("/search-users", searchUsers);
+router.get("/search-products", searchProducts);
+router.get("/search-vendors", searchVendors);
+router.get("/search-payments", searchPayments);
+
+// Relatórios
+router.get("/products-report", getProductsReport);
+router.get("/general-report", getGeneralReport);
+
+// ROTAS APENAS PARA SUPER ADMIN
+
+router.delete("/delete-user/:id", checkAdminRole("super_admin"), (req, res) => {
+  res.json({ message: "Usuário deletado (apenas super_admin)" });
+});
+
+router.post("/create-admin", checkAdminRole("super_admin"), (req, res) => {
+  res.json({ message: "Admin criado (apenas super_admin)" });
+});
 
 export default router;

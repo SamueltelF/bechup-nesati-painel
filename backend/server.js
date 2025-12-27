@@ -5,7 +5,8 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import axios from "axios";
 import path from "path";
-// Importing the routes from the routes folder
+
+// Importing the routes
 import authRoutes from "./routes/auth.route.js";
 import productRoutes from "./routes/product.route.js";
 import cartRoutes from "./routes/cart.route.js";
@@ -15,21 +16,61 @@ import analyticsRoutes from "./routes/analytics.route.js";
 import adminProfileRoutes from "./routes/admin.route.js";
 import financialRoutes from "./routes/financial.route.js";
 import devRoutes from "./routes/dev.route.js";
+
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 const __dirname = path.resolve();
-// here limit is set to 5mb, so the user can upload files upto 5mb
-app.use(express.json({ limit: "5mb" }));
-app.use(cookieParser());
+
+// ============================================
+// CONFIGURAÇÃO CORS AJUSTADA
+// ============================================
+
+// Lista de URLs permitidas
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174'
+].filter(Boolean); // Remove undefined
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: function (origin, callback) {
+      // Permitir requisições sem origin (mobile apps, Postman, etc)
+      if (!origin) return callback(null, true);
+      
+      // Verificar se a origin está na lista permitida
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.log('Origin bloqueada pelo CORS:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization']
   })
 );
-// trust proxy is set to 1, so that the app will trust the first proxy that it encounters and it will calculate the correct IP address of the user
+
+// OU se preferir liberar tudo em desenvolvimento:
+// if (process.env.NODE_ENV === "development") {
+//   app.use(cors({ origin: true, credentials: true }));
+// } else {
+//   app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+// }
+
+// Middlewares
+app.use(express.json({ limit: "5mb" }));
+app.use(cookieParser());
 app.set("trust proxy", 1);
+
+// Rotas
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
@@ -39,32 +80,25 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/admin-profile", adminProfileRoutes);
 app.use("/api/financial", financialRoutes);
 app.use("/api/dev", devRoutes);
-//rota adm e dev
+
+// Rota admin e dev
 app.get("/server", (req, res) => {
   res.sendFile(path.join(__dirname, "backend", "pages", "index.html"));
 });
-function naodormeporra() {
-  axios.get('https://anyapi.com.br')
-   .then(response => {
-      console.log("acordando");
-    })
-   .catch(error => {
-      console.error(error);
-    });
-}
-// Serve static assets if in production mode, like the frontend build folder in this case
-// it will optimize the build folder and serve it as static assets
+
+
+// Serve static assets if in production
 if (process.env.NODE_ENV === "production") {
-  // Set static folder
   app.use(express.static(path.join(__dirname, "/frontend/dist")));
-  // if user visit any route other than the api routes, it will serve the index.html file
   app.get("*", (req, res) => {
     res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
   });
 }
-// Connect to the database and 0.0.0.0 means it will listen on all the network interfaces available on the server
+
+// Start server
 app.listen(PORT, "127.0.0.1", () => {
   console.log("Server is running on http://127.0.0.1:" + PORT);
+  console.log("CORS habilitado para:", allowedOrigins);
   connectDB();
-  setInterval(naodormeporra, 13 * 60 * 1000); // Chama a função a cada 13 minutos
+ 
 });

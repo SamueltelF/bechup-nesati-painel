@@ -1,9 +1,9 @@
 import VendorProfile from "../models/admin.model.js";
 import User from "../models/user.model.js";
 
-// ============================================
+
 // VERIFICAÇÃO DE VENDEDORES
-// ============================================
+
 
 // Listar vendedores pendentes de aprovação
 export const getPendingVendors = async (req, res) => {
@@ -195,9 +195,9 @@ export const reactivateVendor = async (req, res) => {
   }
 };
 
-// ============================================
+
 // ESTATÍSTICAS DA PLATAFORMA
-// ============================================
+
 
 // Dashboard de estatísticas gerais
 export const getPlatformStats = async (req, res) => {
@@ -334,9 +334,9 @@ export const searchVendors = async (req, res) => {
   }
 };
 
-// ============================================
+
 // GERENCIAMENTO DE PRODUTOS (ADMIN)
-// ============================================
+
 
 // Listar todos os produtos da plataforma
 export const getAllProductsAdmin = async (req, res) => {
@@ -472,9 +472,8 @@ export const reactivateProduct = async (req, res) => {
   }
 };
 
-// ============================================
+
 // GERENCIAMENTO FINANCEIRO (ADMIN)
-// ============================================
 
 // Listar saques pendentes
 export const getPendingWithdrawals = async (req, res) => {

@@ -1,379 +1,475 @@
 import User from "../models/user.model.js";
 import VendorProfile from "../models/admin.model.js";
+import Product from "../models/product.model.js";
+import jwt from "jsonwebtoken";
 
-// Middleware para verificar senha de dev
-export const verifyDevPassword = (req, res, next) => {
-  const devPassword = req.headers['x-dev-password'] || req.body.devPassword;
-  
-  const correctPassword = process.env.DEV_PASSWORD || "dev123senha";
-  
-  if (devPassword !== correctPassword) {
-    return res.status(401).json({ message: "Senha de desenvolvedor inválida" });
+
+// AUTENTICAÇÃO - ARRAY TEMPORÁRIO
+
+
+// Array de administradores (temporário - substituir por banco depois)
+const adminUsers = [
+  {
+    id: 1,
+    username: "admin",
+    password: "admin123",
+    name: "Administrador Principal",
+    role: "super_admin"
+  },
+  {
+    id: 2,
+    username: "dev",
+    password: "dev123",
+    name: "Desenvolvedor",
+    role: "admin"
   }
-  
-  next();
+];
+
+// Gerar token JWT para admin
+const generateAdminToken = (adminId) => {
+  return jwt.sign(
+    { adminId },
+    process.env.ADMIN_JWT_SECRET || "admin_secret_key_2024",
+    { expiresIn: "7d" }
+  );
 };
 
-// Estatísticas gerais para o dashboard
-export const getDevStats = async (req, res) => {
+// Login do painel administrativo
+export const adminLogin = async (req, res) => {
+  const { username, password } = req.body;
+
   try {
-    // Total de usuários
-    const totalUsers = await User.countDocuments();
-    
-    // Clientes (role: ["customer"])
-    const totalCustomers = await User.countDocuments({ 
-      role: { $size: 1, $all: ["customer"] } 
-    });
-    
-    // Admins (tem role "vendor")
-    const totalAdmins = await User.countDocuments({ 
-      role: { $in: ["vendor"] } 
-    });
-    
-    // Perfis de vendedores
-    const totalSellerProfiles = await VendorProfile.countDocuments();
-    const approvedSellers = await VendorProfile.countDocuments({ 
-      verificationStatus: "approved" 
-    });
-    const pendingSellers = await VendorProfile.countDocuments({ 
-      verificationStatus: "pending" 
-    });
-    const rejectedSellers = await VendorProfile.countDocuments({ 
-      verificationStatus: "rejected" 
-    });
-    const underReviewSellers = await VendorProfile.countDocuments({ 
-      verificationStatus: "under_review" 
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Usuário e senha são obrigatórios" 
+      });
+    }
+
+    // Buscar usuário no array
+    const admin = adminUsers.find(
+      u => u.username === username && u.password === password
+    );
+
+    if (!admin) {
+      return res.status(401).json({ 
+        success: false,
+        message: "Credenciais inválidas" 
+      });
+    }
+
+    // Gerar token JWT
+    const token = generateAdminToken(admin.id);
+
+    // Enviar token como cookie
+    res.cookie("adminAccessToken", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
     });
 
-    // Vendedores com produtos
-    const sellersWithProducts = await VendorProfile.countDocuments({
-      "products.0": { $exists: true }
+    
+    const { password: _, ...adminData } = admin;
+
+    res.json({
+      success: true,
+      message: "Login realizado com sucesso",
+      admin: adminData,
+      token
+    });
+
+  } catch (error) {
+    console.log("Erro no login admin:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao fazer login", 
+      error: error.message 
+    });
+  }
+};
+
+// Logout do painel
+export const adminLogout = async (req, res) => {
+  try {
+    res.clearCookie("adminAccessToken");
+    res.json({
+      success: true,
+      message: "Logout realizado com sucesso"
+    });
+  } catch (error) {
+    console.log("Erro no logout admin:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao fazer logout", 
+      error: error.message 
+    });
+  }
+};
+
+// Verificar sessão
+export const checkAdminSession = async (req, res) => {
+  try {
+    if (req.admin) {
+      return res.json({
+        success: true,
+        isAuthenticated: true,
+        admin: req.admin
+      });
+    }
+
+    res.status(401).json({ 
+      success: false,
+      isAuthenticated: false,
+      message: "Não autenticado"
+    });
+  } catch (error) {
+    res.status(401).json({ 
+      success: false,
+      isAuthenticated: false 
+    });
+  }
+};
+
+
+// DASHBOARD - ESTATÍSTICAS GERAIS
+
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const verifiedUsers = await User.countDocuments({ emailVerified: true });
+    const usersWithPhone = await User.countDocuments({ phone: { $ne: null } });
+
+    const totalVendors = await VendorProfile.countDocuments();
+    const approvedVendors = await VendorProfile.countDocuments({ verificationStatus: "approved" });
+    const pendingVendors = await VendorProfile.countDocuments({ verificationStatus: "pending" });
+    const activeVendors = await VendorProfile.countDocuments({ isActive: true, verificationStatus: "approved" });
+
+    const totalProducts = await Product.countDocuments();
+    const activeProducts = await Product.countDocuments({ isActive: true });
+    const featuredProducts = await Product.countDocuments({ isFeatured: true });
+
+    const vendors = await VendorProfile.find({ verificationStatus: "approved" });
+    
+    let totalSales = 0;
+    let totalEarnings = 0;
+    let totalPlatformFees = 0;
+
+    vendors.forEach(vendor => {
+      totalSales += vendor.totalSales || 0;
+      totalEarnings += vendor.totalEarnings || 0;
+      
+      vendor.balanceHistory.forEach(transaction => {
+        if (transaction.type === "platform_fee") {
+          totalPlatformFees += Math.abs(transaction.amount);
+        }
+      });
     });
 
     res.json({
-      users: {
-        total: totalUsers,
-        customers: totalCustomers,
-        vendors: totalAdmins,
-      },
-      sellers: {
-        total: totalSellerProfiles,
-        approved: approvedSellers,
-        pending: pendingSellers,
-        rejected: rejectedSellers,
-        underReview: underReviewSellers,
-        withProducts: sellersWithProducts,
+      success: true,
+      stats: {
+        users: {
+          total: totalUsers,
+          verified: verifiedUsers,
+          withPhone: usersWithPhone,
+          growthRate: "+12%"
+        },
+        vendors: {
+          total: totalVendors,
+          approved: approvedVendors,
+          pending: pendingVendors,
+          active: activeVendors,
+          growthRate: "+8%"
+        },
+        products: {
+          total: totalProducts,
+          active: activeProducts,
+          featured: featuredProducts,
+          growthRate: "+15%"
+        },
+        financial: {
+          totalSales,
+          totalEarnings,
+          platformFees: totalPlatformFees,
+          monthlyRevenue: "R$ 45K",
+          growthRate: "+23%"
+        }
       }
     });
 
   } catch (error) {
     console.log("Erro ao buscar estatísticas:", error);
     res.status(500).json({ 
+      success: false,
       message: "Erro ao buscar estatísticas", 
       error: error.message 
     });
   }
 };
 
-// Listar todos os usuários customers (não-vendedores)
-export const listCustomers = async (req, res) => {
-  try {
-    const { page = 1, limit = 20, search } = req.query;
 
-    // Buscar apenas customers (sem role vendor)
-    let query = { 
-      role: { $nin: ["vendor"] }
-    };
-    
-    // Busca por nome ou email
+// PESQUISAS
+// ============================================
+
+export const searchUsers = async (req, res) => {
+  try {
+    const { search, emailVerified, phoneVerified, role, page = 1, limit = 20 } = req.query;
+    const query = {};
+
+    if (emailVerified !== undefined) query.emailVerified = emailVerified === "true";
+    if (phoneVerified !== undefined) query.phoneVerified = phoneVerified === "true";
+    if (role) query.role = role;
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } }
-      ];
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [{ name: searchRegex }, { email: searchRegex }, { phone: searchRegex }];
     }
 
-    const customers = await User.find(query)
-      .select("-password -resetPasswordToken -emailVerificationCode -phoneVerificationCode")
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .lean();
-
-    const count = await User.countDocuments(query);
-
-    // Verificar quais já têm VendorProfile
-    const customerIds = customers.map(c => c._id);
-    const existingProfiles = await VendorProfile.find({ 
-      userId: { $in: customerIds } 
-    }).select("userId");
-    
-    const profileUserIds = existingProfiles.map(p => p.userId.toString());
-    
-    // Adicionar flag se já é vendedor pendente
-    const customersWithStatus = customers.map(customer => ({
-      ...customer,
-      hasVendorProfile: profileUserIds.includes(customer._id.toString())
-    }));
+    const totalUsers = await User.countDocuments(query);
+    const users = await User.find(query).select("-password").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
 
     res.json({
-      customers: customersWithStatus,
+      success: true,
+      users,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(count / limit),
-        totalCustomers: count,
-        hasNextPage: page * limit < count,
-        hasPrevPage: page > 1,
+        totalPages: Math.ceil(totalUsers / limit),
+        totalUsers,
+        hasNextPage: page * limit < totalUsers,
+        hasPrevPage: page > 1
       }
     });
-
   } catch (error) {
-    console.log("Erro ao listar customers:", error);
-    res.status(500).json({ 
-      message: "Erro ao listar customers", 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: "Erro ao pesquisar usuários", error: error.message });
   }
 };
 
-// Listar todos os vendedores (com VendorProfile)
-export const listSellers = async (req, res) => {
+export const searchProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, search } = req.query;
+    const { search, category, produtoV, isActive, isFeatured, minPrice, maxPrice, page = 1, limit = 20 } = req.query;
+    const query = {};
 
+    if (category) query.category = category;
+    if (produtoV) query.produtoV = produtoV;
+    if (isActive !== undefined) query.isActive = isActive === "true";
+    if (isFeatured !== undefined) query.isFeatured = isFeatured === "true";
+    if (minPrice) query.price = { $gte: parseFloat(minPrice) };
+    if (maxPrice) query.price = { ...query.price, $lte: parseFloat(maxPrice) };
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [{ name: searchRegex }, { description: searchRegex }];
+    }
+
+    const totalProducts = await Product.countDocuments(query);
+    const products = await Product.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+
+    res.json({
+      success: true,
+      products,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalProducts / limit),
+        totalProducts,
+        hasNextPage: page * limit < totalProducts,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erro ao pesquisar produtos", error: error.message });
+  }
+};
+
+export const searchVendors = async (req, res) => {
+  try {
+    const { search, status, isActive, minSales, maxSales, page = 1, limit = 20 } = req.query;
+    const query = {};
+
+    if (status && status !== "all") query.verificationStatus = status;
+    if (isActive !== undefined) query.isActive = isActive === "true";
+    if (minSales) query.totalSales = { $gte: parseInt(minSales) };
+    if (maxSales) query.totalSales = { ...query.totalSales, $lte: parseInt(maxSales) };
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [{ fullName: searchRegex }, { displayName: searchRegex }, { cpf: searchRegex }];
+    }
+
+    const totalVendors = await VendorProfile.countDocuments(query);
+    const vendors = await VendorProfile.find(query).populate("userId", "name email phone profilePicture").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+
+    res.json({
+      success: true,
+      vendors,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalVendors / limit),
+        totalVendors,
+        hasNextPage: page * limit < totalVendors,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erro ao pesquisar vendedores", error: error.message });
+  }
+};
+
+export const searchPayments = async (req, res) => {
+  try {
+    const { status = "all", vendorId, minAmount, maxAmount, page = 1, limit = 20 } = req.query;
     let query = {};
     
-    if (status) {
-      query.verificationStatus = status;
-    }
+    if (vendorId) query._id = vendorId;
 
-    if (search) {
-      query.$or = [
-        { displayName: { $regex: search, $options: "i" } },
-        { fullName: { $regex: search, $options: "i" } }
-      ];
-    }
+    const vendors = await VendorProfile.find(query).populate("userId", "name email phone");
+    let allWithdrawals = [];
 
-    const sellers = await VendorProfile.find(query)
-      .populate("userId", "name email phone createdAt isActive")
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .lean();
+    vendors.forEach(vendor => {
+      vendor.withdrawalHistory.forEach(withdrawal => {
+        if (status === "all" || withdrawal.status === status) {
+          let includeWithdrawal = true;
+          if (minAmount && withdrawal.amount < parseFloat(minAmount)) includeWithdrawal = false;
+          if (maxAmount && withdrawal.amount > parseFloat(maxAmount)) includeWithdrawal = false;
 
-    const count = await VendorProfile.countDocuments(query);
+          if (includeWithdrawal) {
+            allWithdrawals.push({
+              ...withdrawal.toObject(),
+              withdrawalId: withdrawal._id,
+              vendorId: vendor._id,
+              vendorName: vendor.displayName,
+              vendorEmail: vendor.userId?.email,
+              vendorPhone: vendor.userId?.phone
+            });
+          }
+        }
+      });
+    });
+
+    allWithdrawals.sort((a, b) => new Date(b.requestDate) - new Date(a.requestDate));
+
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    const paginatedWithdrawals = allWithdrawals.slice(startIndex, endIndex);
 
     res.json({
-      sellers,
+      success: true,
+      withdrawals: paginatedWithdrawals,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(count / limit),
-        totalSellers: count,
-        hasNextPage: page * limit < count,
-        hasPrevPage: page > 1,
+        totalPages: Math.ceil(allWithdrawals.length / limit),
+        totalWithdrawals: allWithdrawals.length,
+        hasNextPage: endIndex < allWithdrawals.length,
+        hasPrevPage: page > 1
       }
     });
-
   } catch (error) {
-    console.log("Erro ao listar vendedores:", error);
-    res.status(500).json({ 
-      message: "Erro ao listar vendedores", 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: "Erro ao pesquisar pagamentos", error: error.message });
   }
 };
 
-// Promover customer para vendor (vendedor)
-export const promoteToSeller = async (req, res) => {
+
+// RELATÓRIOS
+export const getProductsReport = async (req, res) => {
   try {
-    const { userId } = req.params;
-    const { displayName } = req.body;
+    const totalProducts = await Product.countDocuments();
+    const activeProducts = await Product.countDocuments({ isActive: true });
+    const inactiveProducts = await Product.countDocuments({ isActive: false });
+    const featuredProducts = await Product.countDocuments({ isFeatured: true });
 
-    // Verificar se usuário existe
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado" });
-    }
+    const productsByCategory = await Product.aggregate([
+      { $group: { _id: "$category", count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
 
-    // Verificar se já é vendor
-    if (user.role.includes("vendor")) {
-      return res.status(400).json({ message: "Usuário já é vendedor" });
-    }
+    const productsByType = await Product.aggregate([
+      { $group: { _id: "$produtoV", count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
 
-    // Verificar se já tem VendorProfile
-    const existingProfile = await VendorProfile.findOne({ userId });
-    if (existingProfile) {
-      return res.status(400).json({ 
-        message: "Usuário já possui perfil de vendedor",
-        profile: existingProfile 
+    res.json({
+      success: true,
+      report: {
+        summary: { total: totalProducts, active: activeProducts, inactive: inactiveProducts, featured: featuredProducts },
+        byCategory: productsByCategory,
+        byType: productsByType
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Erro ao gerar relatório", error: error.message });
+  }
+};
+
+export const getGeneralReport = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const verifiedEmailUsers = await User.countDocuments({ emailVerified: true });
+    const verifiedPhoneUsers = await User.countDocuments({ phoneVerified: true });
+
+    const totalVendors = await VendorProfile.countDocuments();
+    const approvedVendors = await VendorProfile.countDocuments({ verificationStatus: "approved" });
+    const activeVendors = await VendorProfile.countDocuments({ isActive: true });
+
+    const totalProducts = await Product.countDocuments();
+    const activeProducts = await Product.countDocuments({ isActive: true });
+
+    const vendors = await VendorProfile.find({ verificationStatus: "approved" });
+    
+    let totalBalance = 0, totalEarnings = 0, pendingWithdrawals = 0;
+
+    vendors.forEach(vendor => {
+      totalBalance += vendor.balance.total || 0;
+      totalEarnings += vendor.totalEarnings || 0;
+      vendor.withdrawalHistory.forEach(w => {
+        if (w.status === "pending") pendingWithdrawals += w.amount;
       });
-    }
-
-    // Adicionar role vendor ao User
-    await user.addRole("vendor");
-
-    // Criar VendorProfile inicial
-    const vendorProfile = await VendorProfile.create({
-      userId: user._id,
-      fullName: user.name,
-      displayName: displayName || user.name,
-      cpf: "",
-      dateOfBirth: null,
-      verificationStatus: "pending",
-      isActive: true,
     });
 
     res.json({
-      message: "Usuário promovido a vendedor com sucesso",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-      vendorProfile: {
-        _id: vendorProfile._id,
-        displayName: vendorProfile.displayName,
-        verificationStatus: vendorProfile.verificationStatus,
+      success: true,
+      report: {
+        users: {
+          total: totalUsers,
+          emailVerified: verifiedEmailUsers,
+          phoneVerified: verifiedPhoneUsers,
+          verificationRate: ((verifiedEmailUsers / totalUsers) * 100).toFixed(1) + "%"
+        },
+        vendors: {
+          total: totalVendors,
+          approved: approvedVendors,
+          active: activeVendors,
+          approvalRate: ((approvedVendors / totalVendors) * 100).toFixed(1) + "%"
+        },
+        products: {
+          total: totalProducts,
+          active: activeProducts,
+          activeRate: ((activeProducts / totalProducts) * 100).toFixed(1) + "%"
+        },
+        financial: { totalBalance, totalEarnings, pendingWithdrawals, currency: "BRL" }
       }
     });
-
   } catch (error) {
-    console.log("Erro ao promover usuário:", error);
-    res.status(500).json({ 
-      message: "Erro ao promover usuário", 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: "Erro ao gerar relatório", error: error.message });
   }
 };
 
-// Rebaixar vendedor para customer
-export const demoteToCustomer = async (req, res) => {
+export const getRecentActivities = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { limit = 10 } = req.query;
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado" });
-    }
+    const recentUsers = await User.find().select("name email createdAt").sort({ createdAt: -1 }).limit(5);
+    const recentProducts = await Product.find().select("name category createdAt").sort({ createdAt: -1 }).limit(5);
+    const recentVendors = await VendorProfile.find().populate("userId", "name email").select("displayName verificationStatus createdAt").sort({ createdAt: -1 }).limit(5);
 
-    if (!user.role.includes("vendor")) {
-      return res.status(400).json({ message: "Usuário não é vendedor" });
-    }
+    const activities = [];
 
-    // Verificar se tem produtos ativos ou vendas pendentes
-    const vendorProfile = await VendorProfile.findOne({ userId });
-    if (vendorProfile) {
-      const activeProducts = vendorProfile.products.filter(p => p.isActive).length;
-      if (activeProducts > 0) {
-        return res.status(400).json({ 
-          message: "Vendedor possui produtos ativos. Desative-os primeiro.",
-          activeProducts 
-        });
-      }
+    recentUsers.forEach(user => activities.push({ type: "user", user: user.name, action: "criou uma conta", time: user.createdAt, icon: "👤" }));
+    recentProducts.forEach(product => activities.push({ type: "product", user: "Sistema", action: `adicionou produto "${product.name}"`, time: product.createdAt, icon: "📦" }));
+    recentVendors.forEach(vendor => activities.push({ type: "vendor", user: vendor.userId?.name || vendor.displayName, action: "solicitou cadastro como vendedor", time: vendor.createdAt, icon: "🤝" }));
 
-      if (vendorProfile.balance.total > 0) {
-        return res.status(400).json({ 
-          message: "Vendedor possui saldo pendente. Solicite saque primeiro.",
-          balance: vendorProfile.balance.total 
-        });
-      }
+    activities.sort((a, b) => new Date(b.time) - new Date(a.time));
+    const limitedActivities = activities.slice(0, parseInt(limit));
 
-      // Desativar perfil
-      vendorProfile.isActive = false;
-      await vendorProfile.save();
-    }
-
-    // Remover role vendor
-    await user.removeRole("vendor");
-
-    res.json({
-      message: "Vendedor rebaixado para cliente com sucesso",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      }
-    });
-
+    res.json({ success: true, activities: limitedActivities });
   } catch (error) {
-    console.log("Erro ao rebaixar vendedor:", error);
-    res.status(500).json({ 
-      message: "Erro ao rebaixar vendedor", 
-      error: error.message 
-    });
-  }
-};
-
-// Deletar VendorProfile (cuidado - apenas para dev/testes)
-export const deleteSellerProfile = async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const vendorProfile = await VendorProfile.findOne({ userId });
-    if (!vendorProfile) {
-      return res.status(404).json({ message: "Perfil de vendedor não encontrado" });
-    }
-
-    // Verificações de segurança
-    if (vendorProfile.balance.total > 0) {
-      return res.status(400).json({ 
-        message: "Não é possível deletar. Vendedor possui saldo.",
-        balance: vendorProfile.balance.total 
-      });
-    }
-
-    if (vendorProfile.salesHistory.length > 0) {
-      return res.status(400).json({ 
-        message: "Não é possível deletar. Vendedor possui histórico de vendas.",
-        totalSales: vendorProfile.salesHistory.length 
-      });
-    }
-
-    await VendorProfile.findByIdAndDelete(vendorProfile._id);
-
-    // Remover role vendor do user
-    const user = await User.findById(userId);
-    if (user) {
-      await user.removeRole("vendor");
-    }
-
-    res.json({ message: "Perfil de vendedor deletado com sucesso" });
-
-  } catch (error) {
-    console.log("Erro ao deletar perfil:", error);
-    res.status(500).json({ 
-      message: "Erro ao deletar perfil", 
-      error: error.message 
-    });
-  }
-};
-
-// Ver detalhes de um customer específico
-export const getCustomerDetails = async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const user = await User.findById(userId).select("-password");
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado" });
-    }
-
-    // Verificar se tem VendorProfile
-    const vendorProfile = await VendorProfile.findOne({ userId });
-
-    res.json({
-      user,
-      vendorProfile: vendorProfile || null,
-      isEligibleForPromotion: !user.role.includes("vendor") && !vendorProfile
-    });
-
-  } catch (error) {
-    console.log("Erro ao buscar detalhes:", error);
-    res.status(500).json({ 
-      message: "Erro ao buscar detalhes", 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: "Erro ao buscar atividades", error: error.message });
   }
 };

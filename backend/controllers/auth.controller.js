@@ -3,6 +3,7 @@ import User from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 import cloudinary from "../lib/cloudinary.js";
 import { sendVerificationEmail } from "../lib/email.service.js"
+import { sendPhoneVerification, verifyPhoneCode } from "../lib/sms.service.js";
 
 const generateToken = (userId) => {
   const accessToken = jwt.sign(
@@ -22,7 +23,6 @@ const generateToken = (userId) => {
 };
 
 const storeRefreshTokenIn_redis_db = async (userId, refreshToken) => {
-  // store the refresh token in the database
   await redis.set(
     `refresh_token:${userId}`,
     refreshToken,
@@ -33,17 +33,15 @@ const storeRefreshTokenIn_redis_db = async (userId, refreshToken) => {
 
 const setCookies = (res, accessToken, refreshToken) => {
   res.cookie("accessToken", accessToken, {
-    httpOnly: true, // prevents JS from reading the cookie data & cross-site scripting attacks
-    // sameSite: "none",
-    sameSite: "strict", // prevents CSRF attacks
+    httpOnly: true, 
+    sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
     maxAge: 15 * 60 * 1000, // 15 minutes
   });
 
   res.cookie("refreshToken", refreshToken, {
-    httpOnly: true, // prevents JS from reading the cookie data & cross-site scripting attacks
-    // sameSite: "none",
-    sameSite: "strict", // prevents CSRF attacks
+    httpOnly: true, 
+    sameSite: "strict", 
     secure: process.env.NODE_ENV === "production",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
@@ -65,7 +63,7 @@ export const signup = async (req, res) => {
         .json({ message: "Senha deve ter no mínimo 6 caracteres" });
     }
 
-    // check if email already exists
+    
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: "Email já está em uso" });
@@ -78,7 +76,7 @@ export const signup = async (req, res) => {
       }
     }
 
-    // create user
+    // criar usu
     const newUser = await User.create({ 
       email, 
       password, 
@@ -86,14 +84,15 @@ export const signup = async (req, res) => {
       phone: phone || null
     });
 
-    // authenticate user
+    // auth use
     const { accessToken, refreshToken } = generateToken(newUser._id);
     await storeRefreshTokenIn_redis_db(newUser._id, refreshToken);
 
     setCookies(res, accessToken, refreshToken);
 
-    // remove the password from the user data
-    // send response to the client with the user data without the password
+    
+    // remove a senha do data do usu
+    
     res.send({
       _id: newUser._id,
       name: newUser.name,
@@ -153,7 +152,8 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    // get the refresh token from the cookies
+   
+    //buscar uma refencia de token 
     const refreshToken = req.cookies.refreshToken;
 
     if (refreshToken) {
@@ -161,11 +161,13 @@ export const logout = async (req, res) => {
         refreshToken,
         process.env.JWT_REFRESH_TOKEN_SECRET
       );
-      // delete the refresh token from the database
+     
+      // deleta a referencia do token de data
       await redis.del(`refresh_token:${decoded.userId}`);
     }
 
-    // clear the cookies
+    
+    //limpar os cookies
     res.clearCookie("accessToken");
     res.clearCookie("refreshToken");
     res.json({ message: "Logout realizado com sucesso" });
@@ -177,7 +179,8 @@ export const logout = async (req, res) => {
   }
 };
 
-// this controller is used to refresh the access token
+
+// controla os id da referencia do acesso ao token
 export const refreshToken = async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
   try {
@@ -209,7 +212,7 @@ export const refreshToken = async (req, res) => {
       sameSite: "strict",
       maxAge: 15 * 60 * 1000,
     });
-    // as cookies are set in the browser,so its not necessary to send any response to the client because the client will automatically send the access token in the headers and the server will authenticate the user
+    
     res.json({ message: "Token atualizado com sucesso" });
   } catch (error) {
     console.log("error in refresh token controller:", error);
@@ -508,6 +511,169 @@ export const verifyEmailCode = async (req, res) => {
   }
 };
 
+// Enviar código de verificação SMS
+export const sendPhoneVerificationCode = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
+    if (!user.phone) {
+      return res.status(400).json({ 
+        message: "Adicione um número de telefone primeiro" 
+      });
+    }
+
+    if (user.phoneVerified) {
+      return res.status(400).json({ 
+        message: "Telefone já está verificado" 
+      });
+    }
+
+    // Validar formato internacional
+    if (!user.phone.startsWith('+')) {
+      return res.status(400).json({ 
+        message: "Número deve estar no formato internacional: +55..." 
+      });
+    }
+
+    // Enviar código via Twilio
+    try {
+      await sendPhoneVerification(user.phone);
+    } catch (smsError) {
+      console.error("Erro ao enviar SMS:", smsError);
+      return res.status(500).json({ 
+        message: "Erro ao enviar SMS. Verifique o número e tente novamente." 
+      });
+    }
+
+    res.json({ 
+      message: "Código de verificação enviado via SMS",
+      phone: user.phone,
+      expiresIn: "10 minutos"
+    });
+
+  } catch (error) {
+    console.error("Erro ao enviar código SMS:", error);
+    res.status(500).json({ 
+      message: "Erro ao enviar código de verificação", 
+      error 
+    });
+  }
+};
+
+// Verificar código SMS
+export const verifyPhoneCodeController = async (req, res) => {
+  const { code } = req.body;
+
+  try {
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ 
+        message: "Código deve ter 6 dígitos" 
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
+    if (!user.phone) {
+      return res.status(400).json({ 
+        message: "Nenhum telefone cadastrado" 
+      });
+    }
+
+    if (user.phoneVerified) {
+      return res.status(400).json({ 
+        message: "Telefone já está verificado" 
+      });
+    }
+
+    // Verificar código via Twilio
+    let verificationResult;
+    try {
+      verificationResult = await verifyPhoneCode(user.phone, code);
+    } catch (verifyError) {
+      console.error("Erro ao verificar código:", verifyError);
+      return res.status(400).json({ 
+        message: "Código inválido ou expirado" 
+      });
+    }
+
+    if (!verificationResult.success) {
+      return res.status(400).json({ 
+        message: "Código inválido" 
+      });
+    }
+
+    // Marcar telefone como verificado
+    user.phoneVerified = true;
+    await user.save();
+
+    res.json({ 
+      message: "Telefone verificado com sucesso!",
+      phoneVerified: true
+    });
+
+  } catch (error) {
+    console.error("Erro ao verificar código SMS:", error);
+    res.status(500).json({ 
+      message: "Erro ao verificar código", 
+      error 
+    });
+  }
+};
+
+// Reenviar código SMS
+export const resendPhoneVerificationCode = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
+    }
+
+    if (!user.phone) {
+      return res.status(400).json({ 
+        message: "Adicione um número de telefone primeiro" 
+      });
+    }
+
+    if (user.phoneVerified) {
+      return res.status(400).json({ 
+        message: "Telefone já está verificado" 
+      });
+    }
+
+    // Enviar novo código
+    try {
+      await sendPhoneVerification(user.phone);
+    } catch (smsError) {
+      console.error("Erro ao reenviar SMS:", smsError);
+      return res.status(500).json({ 
+        message: "Erro ao reenviar SMS. Tente novamente." 
+      });
+    }
+
+    res.json({ 
+      message: "Novo código enviado via SMS",
+      phone: user.phone,
+      expiresIn: "10 minutos"
+    });
+
+  } catch (error) {
+    console.error("Erro ao reenviar código SMS:", error);
+    res.status(500).json({ 
+      message: "Erro ao reenviar código", 
+      error 
+    });
+  }
+};
+
 // Reenviar código de verificação (com proteção contra spam)
 export const resendEmailVerificationCode = async (req, res) => {
   try {
@@ -556,4 +722,5 @@ export const resendEmailVerificationCode = async (req, res) => {
       error 
     });
   }
+
 };

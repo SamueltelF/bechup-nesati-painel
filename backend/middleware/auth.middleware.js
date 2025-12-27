@@ -2,9 +2,9 @@ import jwt from "jsonwebtoken";
 import User from "../models/user.model.js";
 import VendorProfile from "../models/admin.model.js";
 
-// ============================================
+
 // AUTENTICAÇÃO BÁSICA
-// ============================================
+
 
 /**
  * Protege rotas - verifica se usuário está autenticado
@@ -86,9 +86,8 @@ export const protectRoute = async (req, res, next) => {
   }
 };
 
-// ============================================
+
 // AUTORIZAÇÃO POR ROLE (NOVO SISTEMA)
-// ============================================
 
 /**
  * Verifica se usuário tem role de vendedor
@@ -172,12 +171,7 @@ export const isAdmin = (req, res, next) => {
   }
 };
 
-/**
- * Verifica se é um super admin (admin que aprova vendedores)
- * Super admin pode ser identificado por:
- * 1. Lista de IDs em .env (desenvolvimento)
- * 2. Campo isSuperAdmin no User model (produção)
- */
+
 export const isSuperAdmin = (req, res, next) => {
   // Verificar se é admin primeiro
   if (!req.user || !req.user.role.includes("admin")) {
@@ -187,16 +181,16 @@ export const isSuperAdmin = (req, res, next) => {
     });
   }
 
-  // Opção 1: Verificar por campo no banco (recomendado para produção)
+  
   if (req.user.isSuperAdmin) {
     return next();
   }
 
-  // Opção 2: Lista hardcoded de super admins (para desenvolvimento)
+  
   const SUPER_ADMIN_IDS = process.env.SUPER_ADMIN_IDS?.split(",") || [];
  
   if (SUPER_ADMIN_IDS.length === 0) {
-    // Se não houver super admins configurados, negar acesso
+
     return res.status(403).json({
       message: "Sistema de super administradores não configurado.",
       code: "SUPER_ADMIN_NOT_CONFIGURED"
@@ -213,9 +207,9 @@ export const isSuperAdmin = (req, res, next) => {
   next();
 };
 
-// ============================================
+
 // COMPATIBILIDADE COM CÓDIGO ANTIGO
-// ============================================
+
 
 /**
  * @deprecated Use isAdmin ao invés
@@ -235,9 +229,9 @@ export const isVerifiedAdmin = async (req, res, next) => {
   return isVerifiedVendor(req, res, next);
 };
 
-// ============================================
+
 // VERIFICAÇÕES ADICIONAIS
-// ============================================
+
 
 /**
  * Verifica se email está verificado
@@ -280,9 +274,7 @@ export const requirePhone = (req, res, next) => {
   next();
 };
 
-// ============================================
 // GERENCIAMENTO DE RECURSOS
-// ============================================
 
 /**
  * Verifica se usuário pode gerenciar um recurso
@@ -393,9 +385,7 @@ export const isSelfOrAdmin = (req, res, next) => {
   });
 };
 
-// ============================================
 // VERIFICAÇÕES COMBINADAS
-// ============================================
 
 /**
  * Verifica se usuário tem qualquer uma das roles especificadas
@@ -445,9 +435,7 @@ export const hasAllRoles = (...roles) => {
   };
 };
 
-// ============================================
 // RATE LIMITING (Opcional)
-// ============================================
 
 const requestCounts = new Map();
 
@@ -495,9 +483,7 @@ export const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000) => {
   };
 };
 
-// ============================================
 // AUDIT LOG (Opcional)
-// ============================================
 
 /**
  * Registra ações importantes para auditoria

@@ -28,7 +28,8 @@
     "mongoose": "^8.7.0",
     "nodemailer": "^6.10.1",
     "openai": "^4.73.0",
-    "stripe": "^17.3.1"
+    "stripe": "^17.3.1",
+    "twilio": "^5.10.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

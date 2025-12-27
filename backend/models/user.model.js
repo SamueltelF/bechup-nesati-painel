@@ -30,18 +30,14 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     
-    // ============================================
     // SISTEMA DE ROLES
-    // ============================================
     role: {
       type: [String],
       enum: ["customer", "vendor", "admin"],
       default: ["customer"],
     },
     
-    // ============================================
     // VERIFICAÇÕES
-    // ============================================
     emailVerified: {
       type: Boolean,
       default: false,
@@ -81,9 +77,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     
-    // ============================================
     // STATUS DA CONTA
-    // ============================================
     isActive: {
       type: Boolean,
       default: true,
@@ -97,9 +91,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     
-    // ============================================
     // ENDEREÇOS (PARA COMPRAS)
-    // ============================================
     addresses: [
       {
         label: {
@@ -120,9 +112,7 @@ const userSchema = new mongoose.Schema(
       }
     ],
     
-    // ============================================
     // PREFERÊNCIAS
-    // ============================================
     preferences: {
       notifications: {
         email: {
@@ -148,9 +138,7 @@ const userSchema = new mongoose.Schema(
       },
     },
     
-    // ============================================
     // HISTÓRICO DE LOGIN
-    // ============================================
     lastLogin: {
       type: Date,
       default: null,
@@ -169,16 +157,16 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// ============================================
+
 // ÍNDICES
-// ============================================
+
 userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 });
 userSchema.index({ role: 1 });
 
-// ============================================
+
 // PRE-SAVE HOOKS
-// ============================================
+
 
 // Criptografar senha antes de salvar
 userSchema.pre("save", async function (next) {
@@ -193,9 +181,9 @@ userSchema.pre("save", async function (next) {
   }
 });
 
-// ============================================
+
 // MÉTODOS DE INSTÂNCIA
-// ============================================
+
 
 // Comparar senha
 userSchema.methods.comparePassword = async function (candidatePassword) {
