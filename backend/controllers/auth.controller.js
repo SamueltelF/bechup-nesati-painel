@@ -109,6 +109,9 @@ export const signup = async (req, res) => {
   }
 };
 
+
+
+// ✅ CORRETO - Espera { identifier, password }
 export const login = async (req, res) => {
   const { identifier, password } = req.body;
  

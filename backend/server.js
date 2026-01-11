@@ -82,18 +82,11 @@ app.use("/api/financial", financialRoutes);
 app.use("/api/dev", devRoutes);
 
 // Rota admin e dev
-app.get("/server", (req, res) => {
-  res.sendFile(path.join(__dirname, "backend", "pages", "index.html"));
-});
+
 
 
 // Serve static assets if in production
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "/frontend/dist")));
-  app.get("*", (req, res) => {
-    res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
-  });
-}
+
 
 // Start server
 app.listen(PORT, "127.0.0.1", () => {

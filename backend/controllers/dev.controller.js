@@ -1,6 +1,7 @@
 import User from "../models/user.model.js";
 import VendorProfile from "../models/admin.model.js";
 import Product from "../models/product.model.js";
+import VendorVerificationHistory from "../models/historico.model.js";
 import jwt from "jsonwebtoken";
 
 
@@ -471,5 +472,302 @@ export const getRecentActivities = async (req, res) => {
     res.json({ success: true, activities: limitedActivities });
   } catch (error) {
     res.status(500).json({ success: false, message: "Erro ao buscar atividades", error: error.message });
+  }
+};
+
+export const approveVendorWithHistory = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const { notes } = req.body;
+
+    const vendor = await VendorProfile.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendedor não encontrado" });
+    }
+
+    if (vendor.verificationStatus === "approved") {
+      return res.status(400).json({ message: "Vendedor já aprovado" });
+    }
+
+    // 1. CRIAR REGISTRO NO HISTÓRICO
+    const historyRecord = await VendorVerificationHistory.create({
+      vendorProfileId: vendor._id,
+      userId: vendor.userId,
+      submittedData: {
+        fullName: vendor.fullName,
+        cpf: vendor.cpf,
+        dateOfBirth: vendor.dateOfBirth,
+        personalPhoto: vendor.personalPhoto,
+        rgFrontPhoto: vendor.rgFrontPhoto,
+        rgBackPhoto: vendor.rgBackPhoto,
+        bankDetails: vendor.bankDetails,
+      },
+      submittedProducts: vendor.products.map(p => ({
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        image: p.image,
+        category: p.category,
+        produtoV: p.produtoV,
+        submittedAt: p.createdAt,
+      })),
+      verificationStatus: "approved",
+      decision: {
+        madeBy: req.admin?.name || "Administrador",
+        madeAt: new Date(),
+        action: "approved",
+        reason: null,
+        notes: notes || null,
+      },
+      reviewedAt: new Date(),
+    });
+
+    // 2. APROVAR VENDEDOR
+    await vendor.approve();
+
+    // 3. LIMPAR DADOS SENSÍVEIS
+    vendor.personalPhoto = null;
+    vendor.rgFrontPhoto = null;
+    vendor.rgBackPhoto = null;
+    await vendor.save();
+
+    res.json({
+      success: true,
+      message: "Vendedor aprovado e dados sensíveis arquivados",
+      vendor: {
+        _id: vendor._id,
+        fullName: vendor.fullName,
+        displayName: vendor.displayName,
+        verificationStatus: vendor.verificationStatus,
+        verificationDate: vendor.verificationDate,
+      },
+      historyId: historyRecord._id,
+    });
+
+  } catch (error) {
+    console.log("Erro ao aprovar vendedor:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao aprovar vendedor", 
+      error: error.message 
+    });
+  }
+};
+
+// ============================================
+// REJEITAR VENDEDOR COM HISTÓRICO
+// ============================================
+export const rejectVendorWithHistory = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const { reason, notes } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Motivo da rejeição é obrigatório" 
+      });
+    }
+
+    const vendor = await VendorProfile.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendedor não encontrado" });
+    }
+
+    // 1. CRIAR REGISTRO NO HISTÓRICO
+    const historyRecord = await VendorVerificationHistory.create({
+      vendorProfileId: vendor._id,
+      userId: vendor.userId,
+      submittedData: {
+        fullName: vendor.fullName,
+        cpf: vendor.cpf,
+        dateOfBirth: vendor.dateOfBirth,
+        personalPhoto: vendor.personalPhoto,
+        rgFrontPhoto: vendor.rgFrontPhoto,
+        rgBackPhoto: vendor.rgBackPhoto,
+        bankDetails: vendor.bankDetails,
+      },
+      submittedProducts: vendor.products.map(p => ({
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        image: p.image,
+        category: p.category,
+        produtoV: p.produtoV,
+        submittedAt: p.createdAt,
+      })),
+      verificationStatus: "rejected",
+      decision: {
+        madeBy: req.admin?.name || "Administrador",
+        madeAt: new Date(),
+        action: "rejected",
+        reason: reason,
+        notes: notes || null,
+      },
+      reviewedAt: new Date(),
+    });
+
+    // 2. REJEITAR VENDEDOR
+    await vendor.reject(reason);
+
+    res.json({
+      success: true,
+      message: "Vendedor rejeitado e dados arquivados",
+      vendor: {
+        _id: vendor._id,
+        fullName: vendor.fullName,
+        verificationStatus: vendor.verificationStatus,
+        rejectionReason: vendor.rejectionReason,
+      },
+      historyId: historyRecord._id,
+    });
+
+  } catch (error) {
+    console.log("Erro ao rejeitar vendedor:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao rejeitar vendedor", 
+      error: error.message 
+    });
+  }
+};
+
+// ============================================
+// BUSCAR HISTÓRICO DE VERIFICAÇÕES
+// ============================================
+export const getVerificationHistory = async (req, res) => {
+  try {
+    const { 
+      vendorId, 
+      status, 
+      action,
+      page = 1, 
+      limit = 20 
+    } = req.query;
+
+    const query = {};
+    
+    if (vendorId) query.vendorProfileId = vendorId;
+    if (status) query.verificationStatus = status;
+    if (action) query["decision.action"] = action;
+
+    const totalRecords = await VendorVerificationHistory.countDocuments(query);
+
+    const history = await VendorVerificationHistory.find(query)
+      .populate("userId", "name email phone")
+      .populate("vendorProfileId", "displayName isActive")
+      .sort({ "decision.madeAt": -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      success: true,
+      history,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalRecords / limit),
+        totalRecords,
+        hasNextPage: page * limit < totalRecords,
+        hasPrevPage: page > 1,
+      }
+    });
+
+  } catch (error) {
+    console.log("Erro ao buscar histórico:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao buscar histórico", 
+      error: error.message 
+    });
+  }
+};
+
+// ============================================
+// BUSCAR DETALHES DE UMA VERIFICAÇÃO
+// ============================================
+export const getVerificationDetails = async (req, res) => {
+  try {
+    const { historyId } = req.params;
+
+    const record = await VendorVerificationHistory.findById(historyId)
+      .populate("userId", "name email phone profilePicture")
+      .populate("vendorProfileId", "displayName verificationStatus isActive");
+
+    if (!record) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Registro não encontrado" 
+      });
+    }
+
+    res.json({
+      success: true,
+      record,
+    });
+
+  } catch (error) {
+    console.log("Erro ao buscar detalhes:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao buscar detalhes", 
+      error: error.message 
+    });
+  }
+};
+
+// ============================================
+// ESTATÍSTICAS DE VERIFICAÇÕES
+// ============================================
+export const getVerificationStats = async (req, res) => {
+  try {
+    const totalSubmissions = await VendorVerificationHistory.countDocuments();
+    const approvedCount = await VendorVerificationHistory.countDocuments({ 
+      "decision.action": "approved" 
+    });
+    const rejectedCount = await VendorVerificationHistory.countDocuments({ 
+      "decision.action": "rejected" 
+    });
+    const pendingCount = await VendorVerificationHistory.countDocuments({ 
+      verificationStatus: "pending" 
+    });
+
+    // Últimas aprovações
+    const recentApprovals = await VendorVerificationHistory.find({
+      "decision.action": "approved"
+    })
+      .populate("userId", "name email")
+      .sort({ "decision.madeAt": -1 })
+      .limit(5);
+
+    // Últimas rejeições
+    const recentRejections = await VendorVerificationHistory.find({
+      "decision.action": "rejected"
+    })
+      .populate("userId", "name email")
+      .sort({ "decision.madeAt": -1 })
+      .limit(5);
+
+    res.json({
+      success: true,
+      stats: {
+        total: totalSubmissions,
+        approved: approvedCount,
+        rejected: rejectedCount,
+        pending: pendingCount,
+        approvalRate: totalSubmissions > 0 
+          ? ((approvedCount / totalSubmissions) * 100).toFixed(1) + "%" 
+          : "0%",
+      },
+      recentApprovals,
+      recentRejections,
+    });
+
+  } catch (error) {
+    console.log("Erro ao buscar estatísticas:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao buscar estatísticas", 
+      error: error.message 
+    });
   }
 };
