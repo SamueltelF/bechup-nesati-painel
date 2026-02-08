@@ -1,10 +1,14 @@
 import React from 'react';
 import { useDashboard } from '../hook/hook.js';
+import { Link } from "react-router-dom"
+
+
+
 
 export default function DashboardPage() {
   const { stats, activities, loading, error } = useDashboard();
 
-  if (loading) {
+ if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -27,6 +31,31 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* ✅ ALERTA DE VENDEDORES PENDENTES */}
+      {stats?.verifications?.pending > 0 && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+            <div>
+                <p className="font-semibold text-yellow-800">
+                  {stats.verifications.pending} vendedor(es) aguardando aprovação
+                </p>
+                <p className="text-sm text-yellow-700">
+                  Clique para revisar e aprovar/rejeitar
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/admin/verificacoes"
+              className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors font-semibold"
+            >
+              Revisar Agora
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard
@@ -39,15 +68,18 @@ export default function DashboardPage() {
           value={stats?.vendors.active}
           growth={stats?.vendors.growthRate}
         />
+        
+        {/* ✅ NOVO CARD: Vendedores Pendentes */}
+        <StatCard
+          title="Pendentes Aprovação"
+          value={stats?.verifications?.pending || 0}
+          subtitle={`${stats?.verifications?.underReview || 0} em análise`}
+        />
+        
         <StatCard
           title="Produtos Ativos"
           value={stats?.products.active}
           growth={stats?.products.growthRate}
-        />
-        <StatCard
-          title="Receita Mensal"
-          value={stats?.financial.monthlyRevenue}
-          growth={stats?.financial.growthRate}
         />
       </div>
 
@@ -91,7 +123,7 @@ export default function DashboardPage() {
 }
 
 
-const StatCard = ({ title, value, growth, icon, color }) => {
+const StatCard = ({ title, value, growth, subtitle, icon, color }) => {
   const colors = {
     blue: 'from-blue-500 to-blue-600',
     green: 'from-green-500 to-green-600',
@@ -110,6 +142,10 @@ const StatCard = ({ title, value, growth, icon, color }) => {
       <p className="text-3xl font-bold text-gray-900 mb-1">{value || 0}</p>
       {growth && (
         <p className="text-xs text-green-600 font-semibold">{growth}</p>
+      )}
+      {/* ✅ NOVO: Subtitle */}
+      {subtitle && (
+        <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
       )}
     </div>
   );

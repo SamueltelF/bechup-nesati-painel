@@ -177,6 +177,56 @@ export const useReports = () => {
   return { productsReport, generalReport, loading, error, reload: loadReports };
 };
 
+
+// Hook para verificações de vendedor
+export const useVendorVerifications = () => {
+  const [verifications, setVerifications] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [pagination, setPagination] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const loadVerifications = useCallback(async (params = {}) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await API.verification.getPendingVerifications(params);
+      setVerifications(response.history || []);
+      setPagination(response.pagination || {});
+    } catch (err) {
+      setError(err.message);
+      console.error('Erro ao carregar verificações:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const response = await API.verification.getVerificationStats();
+      setStats(response.stats);
+    } catch (err) {
+      console.error('Erro ao carregar stats:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadVerifications();
+    loadStats();
+  }, [loadVerifications, loadStats]);
+
+  return { 
+    verifications, 
+    stats,
+    pagination, 
+    loading, 
+    error, 
+    loadVerifications,
+    loadStats
+  };
+};
+
 // AUTH
 export const useAuth = () => {
   const [user, setUser] = useState(API.auth.getUser());
@@ -217,6 +267,8 @@ export const useAuth = () => {
       setLoading(false);
     }
   }, []);
+
+  
 
   return { user, isAuthenticated, loading, error, login, logout };
 };

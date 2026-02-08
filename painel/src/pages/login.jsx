@@ -52,7 +52,7 @@ export default function AdminLogin() {
         // Redirecionar após 1 segundo
         setTimeout(() => {
           // Você pode usar React Router aqui se tiver
-          window.location.href = '/admin/dashboard';
+          window.location.href = '/painel';
         }, 1000);
       } else {
         showMessage(data.message || 'Credenciais inválidas', 'error');

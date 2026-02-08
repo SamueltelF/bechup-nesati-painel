@@ -186,13 +186,88 @@ export const reportService = {
 };
 
 
+
+
+// VERIFICAÇÕES DE VENDEDORES
+export const verificationService = {
+  // Listar verificações pendentes
+  getPendingVerifications: async (params = {}) => {
+    const queryParams = new URLSearchParams();
+    queryParams.append('status', params.status || 'pending');
+    queryParams.append('page', params.page || 1);
+    queryParams.append('limit', params.limit || 20);
+    
+    return apiRequest(`${API_DEV_ENDPOINT}/verification-history?${queryParams}`);
+  },
+
+  // Detalhes de uma verificação
+  getVerificationDetails: async (historyId) => {
+    return apiRequest(`${API_DEV_ENDPOINT}/verification-history/${historyId}`);
+  },
+
+  // Estatísticas de verificações
+  getVerificationStats: async () => {
+    return apiRequest(`${API_DEV_ENDPOINT}/verification-stats`);
+  },
+
+  // Aprovar vendedor
+  approveVendor: async (vendorId, notes = '') => {
+    return apiRequest(`${API_DEV_ENDPOINT}/vendors/${vendorId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ notes })
+    });
+  },
+
+  // Rejeitar vendedor
+  rejectVendor: async (vendorId, reason, notes = '') => {
+    return apiRequest(`${API_DEV_ENDPOINT}/vendors/${vendorId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, notes })
+    });
+  },
+
+  downloadVerificationPDF: async (historyId) => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      
+      const response = await fetch(`${API_DEV_ENDPOINT}/verification/${historyId}/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao baixar PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `verificacao-vendedor-${historyId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Erro ao baixar PDF:', error);
+      throw error;
+    }
+  }
+
+};
+
 // EXPORTAR SERVIÇO UNIFICADO
 
 const API = {
   auth: authService,
   dashboard: dashboardService,
   search: searchService,
-  reports: reportService
+  reports: reportService,
+   verification: verificationService // ✅ NOVO
 };
 
 export default API;
