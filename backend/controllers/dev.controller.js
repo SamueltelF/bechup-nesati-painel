@@ -3,6 +3,7 @@ import VendorProfile from "../models/admin.model.js";
 import Product from "../models/product.model.js";
 import VendorVerificationHistory from "../models/historico.model.js";
 import jwt from "jsonwebtoken";
+import { generateVerificationPDF } from "../service/pdf,vendedor.js";
 
 
 // AUTENTICAÇÃO - ARRAY TEMPORÁRIO
@@ -12,8 +13,8 @@ import jwt from "jsonwebtoken";
 const adminUsers = [
   {
     id: 1,
-    username: "admin",
-    password: "admin123",
+    username: "10685908",
+    password: "513447",
     name: "Administrador Principal",
     role: "super_admin"
   },
@@ -151,6 +152,10 @@ export const getDashboardStats = async (req, res) => {
     const activeProducts = await Product.countDocuments({ isActive: true });
     const featuredProducts = await Product.countDocuments({ isFeatured: true });
 
+    const pendingVerifications = await VendorVerificationHistory.countDocuments({verificationStatus: "pending"});
+
+    const underReviewVerifications = await VendorVerificationHistory.countDocuments({verificationStatus: "under_review"});
+
     const vendors = await VendorProfile.find({ verificationStatus: "approved" });
     
     let totalSales = 0;
@@ -168,7 +173,7 @@ export const getDashboardStats = async (req, res) => {
       });
     });
 
-    res.json({
+     res.json({
       success: true,
       stats: {
         users: {
@@ -183,6 +188,12 @@ export const getDashboardStats = async (req, res) => {
           pending: pendingVendors,
           active: activeVendors,
           growthRate: "+8%"
+        },
+        // ✅ NOVO: Adicionar estatísticas de verificação
+        verifications: {
+          pending: pendingVerifications,
+          underReview: underReviewVerifications,
+          total: pendingVerifications + underReviewVerifications
         },
         products: {
           total: totalProducts,
@@ -550,6 +561,45 @@ export const approveVendorWithHistory = async (req, res) => {
       success: false,
       message: "Erro ao aprovar vendedor", 
       error: error.message 
+    });
+  }
+};
+
+
+
+export const generateVerificationPDFController = async (req, res) => {
+  try {
+    const { historyId } = req.params;
+
+    // Buscar dados completos da verificação
+    const verification = await VendorVerificationHistory.findById(historyId)
+      .populate("userId", "name email phone createdAt")
+      .populate("vendorProfileId", "displayName verificationStatus");
+
+    if (!verification) {
+      return res.status(404).json({
+        success: false,
+        message: "Verificação não encontrada"
+      });
+    }
+
+    // Gerar PDF
+    const pdfBuffer = await generateVerificationPDF(verification);
+
+    // Configurar headers para download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="verificacao-${verification.submittedData.fullName.replace(/\s+/g, '_')}-${Date.now()}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Enviar PDF
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("Erro ao gerar PDF:", error);
+    res.status(500).json({
+      success: false,
+      message: "Erro ao gerar PDF",
+      error: error.message
     });
   }
 };

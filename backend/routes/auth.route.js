@@ -1,73 +1,70 @@
+// ============================================
+// ARQUIVO: routes/auth.routes.js
+// ROTAS DE AUTENTICAÇÃO DE USUÁRIOS (NÃO É PAINEL ADMIN!)
+// ============================================
+
 import express from "express";
 import {
-  // Autenticação
-  adminLogin,
-  adminLogout,
-  checkAdminSession,
-  
-  // Dashboard
-  getDashboardStats,
-  
-  // Pesquisas
-  searchUsers,
-  searchProducts,
-  searchVendors,
-  searchPayments,
-  
-  // Relatórios
-  getProductsReport,
-  getGeneralReport,
-  
-  // Atividades
-  getRecentActivities
-} from "../controllers/dev.controller.js";
-
-import { 
-  protectAdminRoute, 
-  checkAdminRole, 
-  rateLimitAdmin 
-} from "../middleware/admin.middleware.js";
+  signup,
+  login,
+  logout,
+  refreshToken,
+  getProfile,
+  uploadProfilePicture,
+  deletarProfilePicture,
+  updateEmail,
+  updatePhone,
+  forceLogout,
+  sendEmailVerificationCode,
+  verifyEmailCode,
+  resendEmailVerificationCode,
+  sendPhoneVerificationCode,
+  verifyPhoneCodeController,
+  resendPhoneVerificationCode,
+  submitVendorApplication,
+  getVendorApplicationStatus
+} from "../controllers/auth.controller.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// ROTAS PÚBLICAS (SEM PROTEÇÃO)
-router.post("/login", adminLogin);
-
-// ROTAS PROTEGIDAS (REQUER AUTENTICAÇÃO)
-
-// Aplicar proteção e rate limit em todas as rotas abaixo
-router.use(protectAdminRoute);
-router.use(rateLimitAdmin(100, 15 * 60 * 1000)); // 100 requisições a cada 15 minutos
-
-// Autenticação
-router.post("/logout", adminLogout);
-router.get("/session", checkAdminSession);
-
-// Dashboard
-router.get("/dashboard-stats", getDashboardStats);
-router.get("/recent-activities", getRecentActivities);
-
-// Pesquisas (qualquer admin pode acessar)
-router.get("/search-users", searchUsers);
-router.get("/search-products", searchProducts);
-router.get("/search-vendors", searchVendors);
-router.get("/search-payments", searchPayments);
-
-// Relatórios (qualquer admin pode acessar)
-router.get("/products-report", getProductsReport);
-router.get("/general-report", getGeneralReport);
-
 // ============================================
-// ROTAS APENAS PARA SUPER ADMIN
+// ROTAS PÚBLICAS (SEM AUTENTICAÇÃO)
 // ============================================
 
-// Exemplo: Rotas sensíveis apenas para super_admin
-router.delete("/delete-user/:id", checkAdminRole("super_admin"), (req, res) => {
-  res.json({ message: "Usuário deletado (apenas super_admin)" });
-});
+// Autenticação básica
+router.post("/signup", signup);
+router.post("/login", login);
+router.post("/refresh-token", refreshToken);
 
-router.post("/create-admin", checkAdminRole("super_admin"), (req, res) => {
-  res.json({ message: "Admin criado (apenas super_admin)" });
-});
+// ============================================
+// ROTAS PROTEGIDAS (REQUER LOGIN)
+// ============================================
+
+// Perfil e sessão
+router.get("/profile", protectRoute, getProfile);
+router.post("/logout", protectRoute, logout);
+router.post("/force-logout", protectRoute, forceLogout);
+
+// Foto de perfil
+router.post("/profile/picture", protectRoute, uploadProfilePicture);
+router.delete("/profile/picture", protectRoute, deletarProfilePicture);
+
+// Atualizar dados pessoais
+router.put("/profile/email", protectRoute, updateEmail);
+router.put("/update-phone", protectRoute, updatePhone);
+
+// Verificação de email
+router.post("/send-email-verification", protectRoute, sendEmailVerificationCode);
+router.post("/verify-email", protectRoute, verifyEmailCode);
+router.post("/resend-email-verification", protectRoute, resendEmailVerificationCode);
+
+// Verificação de telefone (SMS)
+router.post("/send-phone-verification", protectRoute, sendPhoneVerificationCode);
+router.post("/verify-phone", protectRoute, verifyPhoneCodeController);
+router.post("/resend-phone-verification", protectRoute, resendPhoneVerificationCode);
+
+router.post("/submit-vendor-application", protectRoute, submitVendorApplication);
+router.get("/vendor-application-status", protectRoute, getVendorApplicationStatus);
 
 export default router;

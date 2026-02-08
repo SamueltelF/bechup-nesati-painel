@@ -6,12 +6,13 @@ const vendorVerificationHistorySchema = new mongoose.Schema(
     vendorProfileId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "VendorProfile",
-      required: true,
+      required: false, 
+      default: null,
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: true, 
     },
 
     // DADOS PESSOAIS SUBMETIDOS (BACKUP)
@@ -19,9 +20,8 @@ const vendorVerificationHistorySchema = new mongoose.Schema(
       fullName: String,
       cpf: String,
       dateOfBirth: Date,
-      personalPhoto: String,
-      rgFrontPhoto: String,
-      rgBackPhoto: String,
+      displayName: String, // ✅ Adicione este campo se ainda não existir
+      // ✅ Campos de foto REMOVIDOS
       bankDetails: {
         bankName: String,
         accountType: String,

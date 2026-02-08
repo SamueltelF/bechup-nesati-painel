@@ -240,3 +240,8 @@ export const canManageResource = (getResourceUserId) => {
     }
   };
 };
+
+
+export const protectDevPanel = protectAdminRoute;
+export const checkDevPanelRole = checkAdminRole;
+export const rateLimitDevPanel = rateLimitAdmin;

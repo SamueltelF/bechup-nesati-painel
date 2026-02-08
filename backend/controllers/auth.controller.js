@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import cloudinary from "../lib/cloudinary.js";
 import { sendVerificationEmail } from "../lib/email.service.js"
 import { sendPhoneVerification, verifyPhoneCode } from "../lib/sms.service.js";
+import VendorVerificationHistory from "../models/historico.model.js";
+import VendorProfile from "../models/admin.model.js";
 
 const generateToken = (userId) => {
   const accessToken = jwt.sign(
@@ -116,40 +118,84 @@ export const login = async (req, res) => {
   const { identifier, password } = req.body;
  
   try {
+    // Validação de entrada
     if (!identifier || !password) {
       return res.status(400).json({ 
         message: "Email e senha são obrigatórios" 
       });
     }
 
-    const user = await User.findOne({ email: identifier });
+    // Buscar usuário por email
+    const user = await User.findOne({ email: identifier.toLowerCase().trim() });
 
-    if (user && (await user.comparePassword(password))) {
-      const { accessToken, refreshToken } = generateToken(user._id);
-
-      await storeRefreshTokenIn_redis_db(user._id, refreshToken);
-      setCookies(res, accessToken, refreshToken);
-
-      res.json({ 
-        user: {
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          profilePicture: user.profilePicture,
-          emailVerified: user.emailVerified,
-          phoneVerified: user.phoneVerified,
-          role: user.role
-        }
+    if (!user) {
+      return res.status(400).json({ 
+        message: "Email ou senha inválidos" 
       });
-    } else {
-      res.status(400).json({ message: "Email ou senha inválidos" });
     }
+    if (user.isLocked()) {
+      const timeLeft = Math.ceil((user.lockUntil - Date.now()) / 1000 / 60);
+      return res.status(423).json({ 
+        message: `Conta bloqueada. Tente novamente em ${timeLeft} minutos.` 
+      });
+    }
+
+  
+    if (user.isBanned) {
+      return res.status(403).json({ 
+        message: `Conta banida. Motivo: ${user.banReason || "Violação dos termos"}` 
+      });
+    }
+
+    // Verificar senha
+    const isPasswordValid = await user.comparePassword(password);
+
+    if (!isPasswordValid) {
+      await user.incrementLoginAttempts();
+      
+      const attemptsLeft = 5 - user.loginAttempts;
+      
+      if (attemptsLeft > 0) {
+        return res.status(400).json({ 
+          message: `Senha inválida. Você tem ${attemptsLeft} tentativa(s) restante(s).` 
+        });
+      } else {
+        return res.status(423).json({ 
+          message: "Conta bloqueada por 2 horas devido a múltiplas tentativas de login." 
+        });
+      }
+    }
+
+ 
+    await user.resetLoginAttempts();
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Gerar tokens
+    const { accessToken, refreshToken } = generateToken(user._id);
+    await storeRefreshTokenIn_redis_db(user._id, refreshToken);
+    setCookies(res, accessToken, refreshToken);
+
+    // Retornar dados do usuário
+    res.json({ 
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        profilePicture: user.profilePicture,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+        role: user.role
+      }
+    });
+
   } catch (error) {
     console.log("Error in login controller:", error);
-    res
-      .status(500)
-      .json({ message: "Erro interno do servidor ao fazer login", error });
+    res.status(500).json({ 
+      message: "Erro interno do servidor ao fazer login", 
+      error: error.message 
+    });
   }
 };
 
@@ -727,3 +773,220 @@ export const resendEmailVerificationCode = async (req, res) => {
   }
 
 };
+
+export const submitVendorApplication = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { 
+      fullName, 
+      cpf, 
+      dateOfBirth, 
+      displayName
+    } = req.body;
+
+    // ============================================
+    // VALIDAÇÕES
+    // ============================================
+
+   if (!fullName || fullName.trim().length < 3) {
+      return res.status(400).json({ 
+        message: "Nome completo é obrigatório (mínimo 3 caracteres)" 
+      });
+    }
+
+    // Validar CPF
+    const cleanedCPF = cpf.replace(/\D/g, "");
+    if (!validateCPF(cleanedCPF)) {
+      return res.status(400).json({ 
+        message: "CPF inválido" 
+      });
+    }
+
+    // Validar idade (18+)
+    const birthDate = new Date(dateOfBirth);
+    const age = calculateAge(birthDate);
+    if (age < 18) {
+      return res.status(400).json({ 
+        message: "Você deve ter no mínimo 18 anos para ser vendedor" 
+      });
+    }
+
+    // ============================================
+    // VERIFICAR SE JÁ EXISTE SUBMISSÃO PENDENTE
+    // ============================================
+
+    const existingSubmission = await VendorVerificationHistory.findOne({
+      userId,
+      verificationStatus: { $in: ["pending", "under_review"] }
+    });
+
+    if (existingSubmission) {
+      return res.status(400).json({ 
+        message: "Você já possui uma solicitação em análise. Aguarde a resposta da equipe.",
+        submissionId: existingSubmission._id,
+        status: existingSubmission.verificationStatus
+      });
+    }
+
+    // Verificar se já foi aprovado antes
+    const existingVendor = await VendorProfile.findOne({ 
+      userId,
+      verificationStatus: "approved" 
+    });
+
+    if (existingVendor) {
+      return res.status(400).json({ 
+        message: "Você já é um vendedor aprovado!" 
+      });
+    }
+
+
+
+
+    // ============================================
+    // CRIAR REGISTRO NO HISTÓRICO DE VERIFICAÇÃO
+    // ============================================
+
+   const verificationRecord = await VendorVerificationHistory.create({
+      userId,
+      // ✅ NÃO inclua vendorProfileId aqui
+      submittedData: {
+        fullName: fullName.trim(),
+        displayName: displayName?.trim() || fullName.trim(),
+        cpf: cleanedCPF,
+        dateOfBirth: birthDate
+      },
+      verificationStatus: "pending",
+      submittedAt: new Date(),
+      ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+      userAgent: req.headers['user-agent']
+    });
+
+    // ============================================
+    // ADICIONAR ROLE "vendor" TEMPORÁRIO (PENDENTE)
+    // ============================================
+
+    const user = await User.findById(userId);
+    if (!user.role.includes("vendor")) {
+      user.role.push("vendor");
+      await user.save();
+    }
+
+    // ============================================
+    // RETORNAR SUCESSO
+    // ============================================
+
+    res.status(201).json({
+      success: true,
+      message: "Solicitação enviada com sucesso! Aguarde a análise da equipe (24-72h úteis).",
+      submission: {
+        id: verificationRecord._id,
+        status: verificationRecord.verificationStatus,
+        submittedAt: verificationRecord.submittedAt
+      },
+      user: {
+        id: user._id,
+        role: user.role
+      }
+    });
+
+
+  } catch (error) {
+    console.error("Erro ao submeter aplicação de vendedor:", error);
+    res.status(500).json({ 
+      message: "Erro ao enviar solicitação", 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Buscar status da submissão do usuário
+ * Rota: GET /api/auth/vendor-application-status
+ */
+export const getVendorApplicationStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Buscar submissão mais recente
+    const submission = await VendorVerificationHistory.findOne({ userId })
+      .sort({ submittedAt: -1 })
+      .select("-submittedData.personalPhoto -submittedData.rgFrontPhoto -submittedData.rgBackPhoto");
+
+    if (!submission) {
+      return res.json({
+        hasSubmission: false,
+        message: "Nenhuma solicitação encontrada"
+      });
+    }
+
+    res.json({
+      hasSubmission: true,
+      submission: {
+        id: submission._id,
+        status: submission.verificationStatus,
+        submittedAt: submission.submittedAt,
+        reviewedAt: submission.reviewedAt,
+        decision: submission.decision
+      }
+    });
+
+  } catch (error) {
+    console.error("Erro ao buscar status:", error);
+    res.status(500).json({ 
+      message: "Erro ao buscar status da solicitação", 
+      error: error.message 
+    });
+  }
+};
+
+// ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
+
+/**
+ * Validar CPF (algoritmo oficial)
+ */
+function validateCPF(cpf) {
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) {
+    return false;
+  }
+
+  let sum = 0;
+  let remainder;
+
+  // Validar primeiro dígito
+  for (let i = 1; i <= 9; i++) {
+    sum += parseInt(cpf.substring(i - 1, i)) * (11 - i);
+  }
+  remainder = (sum * 10) % 11;
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(cpf.substring(9, 10))) return false;
+
+  sum = 0;
+  // Validar segundo dígito
+  for (let i = 1; i <= 10; i++) {
+    sum += parseInt(cpf.substring(i - 1, i)) * (12 - i);
+  }
+  remainder = (sum * 10) % 11;
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(cpf.substring(10, 11))) return false;
+
+  return true;
+}
+
+/**
+ * Calcular idade
+ */
+function calculateAge(birthDate) {
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  
+  return age;
+}
+

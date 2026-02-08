@@ -19,26 +19,43 @@ import {
   getGeneralReport,
   
   // Atividades
-  getRecentActivities
+  getRecentActivities,
+
+  //Historicos
+  getVerificationHistory,
+  getVerificationDetails,
+  getVerificationStats,
+  approveVendorWithHistory,
+  rejectVendorWithHistory,
+
+  //pdf
+  generateVerificationPDFController
 } from "../controllers/dev.controller.js";
 
-
+// ✅ IMPORTAR OS ALIASES
 import { 
-  protectAdminRoute, 
-  checkAdminRole, 
-  rateLimitAdmin 
-} from "../middleware/admin.middleware.js"; 
+  protectDevPanel,
+  checkDevPanelRole,
+  rateLimitDevPanel
+} from "../middleware/admin.middleware.js";
+
+
 
 const router = express.Router();
 
-// ROTAS PÚBLICAS (SEM PROTEÇÃO)
+// ============================================
+// ROTAS PÚBLICAS
+// ============================================
+
 router.post("/login", adminLogin);
 
-// ROTAS PROTEGIDAS (REQUER AUTENTICAÇÃO)
+// ============================================
+// ROTAS PROTEGIDAS
+// ============================================
 
-// Aplicar proteção e rate limit em todas as rotas abaixo
-router.use(protectAdminRoute);
-router.use(rateLimitAdmin(100, 15 * 60 * 1000));
+// ✅ USAR OS ALIASES
+router.use(protectDevPanel);
+router.use(rateLimitDevPanel(100, 15 * 60 * 1000));
 
 // Autenticação
 router.post("/logout", adminLogout);
@@ -58,13 +75,27 @@ router.get("/search-payments", searchPayments);
 router.get("/products-report", getProductsReport);
 router.get("/general-report", getGeneralReport);
 
-// ROTAS APENAS PARA SUPER ADMIN
+// Verificações de Vendedores
+router.get("/verification-history", getVerificationHistory);
+router.get("/verification-history/:historyId", getVerificationDetails);
+router.get("/verification-stats", getVerificationStats);
 
-router.delete("/delete-user/:id", checkAdminRole("super_admin"), (req, res) => {
+// Aprovar/Rejeitar Vendedores
+router.post("/vendors/:vendorId/approve", approveVendorWithHistory);
+router.post("/vendors/:vendorId/reject", rejectVendorWithHistory);
+
+router.get("/verification/:historyId/pdf", generateVerificationPDFController);
+
+// ============================================
+// ROTAS SUPER ADMIN
+// ============================================
+
+// ✅ USAR checkDevPanelRole
+router.delete("/delete-user/:id", checkDevPanelRole("super_admin"), (req, res) => {
   res.json({ message: "Usuário deletado (apenas super_admin)" });
 });
 
-router.post("/create-admin", checkAdminRole("super_admin"), (req, res) => {
+router.post("/create-admin", checkDevPanelRole("super_admin"), (req, res) => {
   res.json({ message: "Admin criado (apenas super_admin)" });
 });
 
