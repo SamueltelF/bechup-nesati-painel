@@ -63,33 +63,62 @@ export const getVendorDetails = async (req, res) => {
 // Aprovar vendedor
 export const approveVendor = async (req, res) => {
   try {
-    const { vendorId } = req.params;
+    const { submissionId } = req.params;
 
-    const vendor = await VendorProfile.findById(vendorId);
-
-    if (!vendor) {
-      return res.status(404).json({ message: "Vendedor não encontrado" });
+    const submission = await VendorVerificationHistory.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ message: "Solicitação não encontrada" });
+    }
+    if (submission.verificationStatus === "approved") {
+      return res.status(400).json({ message: "Solicitação já foi aprovada" });
+    }
+    if (submission.verificationStatus === "rejected") {
+      return res.status(400).json({ message: "Solicitação já foi rejeitada" });
     }
 
-    if (vendor.verificationStatus === "approved") {
-      return res.status(400).json({ message: "Vendedor já está aprovado" });
+    const user = await User.findById(submission.userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado" });
     }
 
-    await vendor.approve();
+    const vendorProfile = await VendorProfile.findOneAndUpdate(
+      { userId: submission.userId },
+      {
+        userId: submission.userId,
+        fullName: submission.submittedData.fullName,
+        displayName: submission.submittedData.displayName,
+        cpf: submission.submittedData.cpf,
+        dateOfBirth: submission.submittedData.dateOfBirth,
+        verificationStatus: "approved",
+        verificationDate: new Date(),
+        rejectionReason: null,
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
 
-    res.json({ 
+    submission.verificationStatus = "approved";
+    submission.reviewedAt = new Date();
+    submission.decision = { approved: true, reviewedBy: req.user._id };
+    await submission.save();
+
+    await user.addRole("vendor");
+
+    res.json({
       message: "Vendedor aprovado com sucesso",
       vendor: {
-        _id: vendor._id,
-        fullName: vendor.fullName,
-        displayName: vendor.displayName,
-        verificationStatus: vendor.verificationStatus,
-        verificationDate: vendor.verificationDate,
+        _id: vendorProfile._id,
+        fullName: vendorProfile.fullName,
+        verificationStatus: vendorProfile.verificationStatus,
+        verificationDate: vendorProfile.verificationDate,
+      },
+      user: {
+        _id: user._id,
+        role: user.role,
       }
     });
 
   } catch (error) {
-    console.log("Erro ao aprovar vendedor:", error);
+    console.error("Erro ao aprovar vendedor:", error);
     res.status(500).json({ message: "Erro ao aprovar vendedor", error: error.message });
   }
 };

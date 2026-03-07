@@ -65,13 +65,6 @@ export const createVendorProfile = async (req, res) => {
       verificationStatus: "pending",
     });
 
-    // Atualizar role do usuário
-    const user = await User.findById(req.user._id);
-    if (!user.role.includes("vendor")) {
-      user.role.push("vendor");
-      await user.save();
-    }
-
     res.status(201).json({ 
       message: "Perfil de vendedor criado com sucesso! Aguarde a aprovação.",
       vendorProfile: {

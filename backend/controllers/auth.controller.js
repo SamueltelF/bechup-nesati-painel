@@ -863,16 +863,6 @@ export const submitVendorApplication = async (req, res) => {
     });
 
     // ============================================
-    // ADICIONAR ROLE "vendor" TEMPORÁRIO (PENDENTE)
-    // ============================================
-
-    const user = await User.findById(userId);
-    if (!user.role.includes("vendor")) {
-      user.role.push("vendor");
-      await user.save();
-    }
-
-    // ============================================
     // RETORNAR SUCESSO
     // ============================================
 
@@ -885,8 +875,8 @@ export const submitVendorApplication = async (req, res) => {
         submittedAt: verificationRecord.submittedAt
       },
       user: {
-        id: user._id,
-        role: user.role
+        id: req.user._id,
+        role: req.user.role
       }
     });
 

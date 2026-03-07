@@ -1,6 +1,6 @@
 import express from "express";
-import { protectRoute } from "../middleware/auth.middleware.js"
-import { isVerifiedAdmin } from "../middleware/admin.middleware.js"
+import { protectRoute, isVerifiedVendor } from "../middleware/auth.middleware.js"
+//import { isVerifiedVendor } from "../middleware/admin.middleware.js"
 import {
   getBalance,
   getBalanceHistory,
@@ -15,7 +15,7 @@ import {
 const router = express.Router()
 
 // Todas as rotas requerem autenticação E perfil de vendedor verificado
-router.use(protectRoute, isVerifiedAdmin)
+router.use(protectRoute, isVerifiedVendor)
 
 // Dashboard
 router.get("/dashboard", getDashboard)

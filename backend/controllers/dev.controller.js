@@ -297,17 +297,28 @@ export const searchVendors = async (req, res) => {
     const { search, status, isActive, minSales, maxSales, page = 1, limit = 20 } = req.query;
     const query = {};
 
-    if (status && status !== "all") query.verificationStatus = status;
-    if (isActive !== undefined) query.isActive = isActive === "true";
-    if (minSales) query.totalSales = { $gte: parseInt(minSales) };
-    if (maxSales) query.totalSales = { ...query.totalSales, $lte: parseInt(maxSales) };
-    if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      query.$or = [{ fullName: searchRegex }, { displayName: searchRegex }, { cpf: searchRegex }];
+    if (status && status !== "all") {
+      query.verificationStatus = status;
+    } else {
+      // Se não especificar status, buscar apenas pendentes e em análise
+      query.verificationStatus = { $in: ["pending", "under_review"] };
     }
 
-    const totalVendors = await VendorProfile.countDocuments(query);
-    const vendors = await VendorProfile.find(query).populate("userId", "name email phone profilePicture").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { "submittedData.fullName": searchRegex },
+        { "submittedData.cpf": searchRegex }
+      ];
+    }
+
+    // ✅ BUSCAR EM VendorVerificationHistory, NÃO em VendorProfile
+    const totalVendors = await VendorVerificationHistory.countDocuments(query);
+    const vendors = await VendorVerificationHistory.find(query)
+      .populate("userId", "name email phone profilePicture")
+      .sort({ submittedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
 
     res.json({
       success: true,
@@ -321,7 +332,11 @@ export const searchVendors = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Erro ao pesquisar vendedores", error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: "Erro ao pesquisar vendedores", 
+      error: error.message 
+    });
   }
 };
 
@@ -377,6 +392,249 @@ export const searchPayments = async (req, res) => {
     res.status(500).json({ success: false, message: "Erro ao pesquisar pagamentos", error: error.message });
   }
 };
+
+//aprovação
+export const searchVendorsForApproval = async (req, res) => {
+  try {
+    const { type, query } = req.query;
+
+    if (!query || query.length < 2) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Digite no mínimo 2 caracteres para buscar" 
+      });
+    }
+
+    let searchConditions = {};
+
+    switch (type) {
+      case 'name':
+        searchConditions = {
+          "submittedData.fullName": { $regex: query, $options: "i" }
+        };
+        break;
+
+      case 'cpf':
+        const cleanCPF = query.replace(/\D/g, "");
+        searchConditions = {
+          "submittedData.cpf": { $regex: cleanCPF }
+        };
+        break;
+
+      case 'email':
+        const usersByEmail = await User.find({
+          email: { $regex: query, $options: "i" }
+        }).select("_id");
+        searchConditions = {
+          userId: { $in: usersByEmail.map(u => u._id) }
+        };
+        break;
+
+      case 'phone':
+        const cleanPhone = query.replace(/\D/g, "");
+        const usersByPhone = await User.find({
+          phone: { $regex: cleanPhone }
+        }).select("_id");
+        searchConditions = {
+          userId: { $in: usersByPhone.map(u => u._id) }
+        };
+        break;
+
+      default:
+        return res.status(400).json({ 
+          success: false,
+          message: "Tipo de busca inválido" 
+        });
+    }
+
+    const vendors = await VendorVerificationHistory.find(searchConditions)
+      .populate("userId", "email phone name")
+      .select("submittedData verificationStatus submittedAt userId")
+      .sort({ submittedAt: -1 })
+      .limit(10);
+
+    res.json({
+      success: true,
+      vendors,
+      count: vendors.length
+    });
+
+  } catch (error) {
+    console.error("Erro ao buscar vendedores:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao buscar vendedores", 
+      error: error.message 
+    });
+  }
+};
+
+//detalhe de buscar completa de vendedor
+export const getVendorDetailsForApproval = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+
+    const vendor = await VendorVerificationHistory.findById(vendorId)
+      .populate("userId", "email phone name emailVerified phoneVerified");
+
+    if (!vendor) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Vendedor não encontrado" 
+      });
+    }
+
+    res.json({
+      success: true,
+      vendor
+    });
+
+  } catch (error) {
+    console.error("Erro ao buscar detalhes:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao buscar detalhes do vendedor", 
+      error: error.message 
+    });
+  }
+};
+
+
+//aprovar
+export const approveVendorFromHistory = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const adminName = req.admin?.name || "Admin";
+
+    const verification = await VendorVerificationHistory.findById(vendorId);
+
+    if (!verification) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Verificação não encontrada" 
+      });
+    }
+
+    if (verification.verificationStatus === "approved") {
+      return res.status(400).json({ 
+        success: false,
+        message: "Este vendedor já foi aprovado" 
+      });
+    }
+
+    // ✅ 1. Atualizar status no histórico
+    verification.verificationStatus = "approved";
+    verification.reviewedAt = new Date();
+    verification.decision = {
+      madeBy: adminName,
+      madeAt: new Date(),
+      action: "approved",
+      reason: "Documentação aprovada",
+      notes: "Aprovado pelo painel admin"
+    };
+    await verification.save();
+
+    // ✅ 2. Criar VendorProfile
+    let vendorProfile = await VendorProfile.findOne({ userId: verification.userId });
+
+    if (!vendorProfile) {
+      vendorProfile = await VendorProfile.create({
+        userId: verification.userId,
+        fullName: verification.submittedData.fullName,
+        displayName: verification.submittedData.displayName || verification.submittedData.fullName,
+        cpf: verification.submittedData.cpf,
+        dateOfBirth: verification.submittedData.dateOfBirth,
+        verificationStatus: "approved",
+        isActive: true,
+        verificationDate: new Date()
+      });
+
+      // Vincular vendorProfileId no histórico
+      verification.vendorProfileId = vendorProfile._id;
+      await verification.save();
+    }
+
+    // ✅ 3. Adicionar role "vendor" no User
+    const user = await User.findById(verification.userId);
+    if (user && !user.role.includes("vendor")) {
+      user.role.push("vendor");
+      await user.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Vendedor aprovado com sucesso!",
+      verification,
+      vendorProfile
+    });
+
+  } catch (error) {
+    console.error("Erro ao aprovar vendedor:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao aprovar vendedor", 
+      error: error.message 
+    });
+  }
+};
+
+//rejeita
+export const rejectVendorFromHistory = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const { reason } = req.body;
+    const adminName = req.admin?.name || "Admin";
+
+    if (!reason || reason.trim() === "") {
+      return res.status(400).json({ 
+        success: false,
+        message: "Motivo da rejeição é obrigatório" 
+      });
+    }
+
+    const verification = await VendorVerificationHistory.findById(vendorId);
+
+    if (!verification) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Verificação não encontrada" 
+      });
+    }
+
+    // ✅ Atualizar histórico
+    verification.verificationStatus = "rejected";
+    verification.reviewedAt = new Date();
+    verification.decision = {
+      madeBy: adminName,
+      madeAt: new Date(),
+      action: "rejected",
+      reason: reason.trim(),
+      notes: "Rejeitado pelo painel admin"
+    };
+    await verification.save();
+
+    // ✅ Remover role "vendor" do usuário
+    const user = await User.findById(verification.userId);
+    if (user) {
+      user.role = user.role.filter(r => r !== "vendor");
+      await user.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Vendedor rejeitado com sucesso",
+      verification
+    });
+
+  } catch (error) {
+    console.error("Erro ao rejeitar vendedor:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Erro ao rejeitar vendedor", 
+      error: error.message 
+    });
+  }
+}; 
 
 
 // RELATÓRIOS

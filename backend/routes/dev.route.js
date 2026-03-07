@@ -28,6 +28,13 @@ import {
   approveVendorWithHistory,
   rejectVendorWithHistory,
 
+  //aprovação
+  searchVendorsForApproval,
+  getVendorDetailsForApproval,
+  approveVendorFromHistory,
+  rejectVendorFromHistory,
+
+
   //pdf
   generateVerificationPDFController
 } from "../controllers/dev.controller.js";
@@ -83,7 +90,13 @@ router.get("/verification-stats", getVerificationStats);
 // Aprovar/Rejeitar Vendedores
 router.post("/vendors/:vendorId/approve", approveVendorWithHistory);
 router.post("/vendors/:vendorId/reject", rejectVendorWithHistory);
+router.get("/vendors/approval/search", searchVendorsForApproval);
+router.get("/vendors/approval/details/:vendorId", getVendorDetailsForApproval);
+router.post("/vendors/approval/approve/:vendorId", approveVendorFromHistory);
+router.post("/vendors/approval/reject/:vendorId", rejectVendorFromHistory);
 
+
+//pdf
 router.get("/verification/:historyId/pdf", generateVerificationPDFController);
 
 // ============================================

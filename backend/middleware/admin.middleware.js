@@ -137,7 +137,7 @@ export const isAdmin = (req, res, next) => {
 /**
  * Verifica se o vendedor está verificado e aprovado
  */
-export const isVerifiedAdmin = async (req, res, next) => {
+export const isVerifiedVendor = async (req, res, next) => {
   try {
     if (!req.user || req.user.role !== "admin") {
       return res.status(403).json({
